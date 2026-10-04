@@ -168,7 +168,7 @@ function render() {
         <div class="summary-card"><span>เบิกล่วงหน้ารวม (อนุมัติแล้ว ทั้งหมด)</span><b style="color:var(--warn)">-${THB(totalAdvance)}</b></div>
         <div class="summary-card"><span>คงเหลือ (ทั้งหมด)</span><b style="color:${remaining < 0 ? 'var(--bad)' : 'var(--good)'}">${THB(remaining)}</b></div>
       ` : `
-        <div class="summary-card"><span>เงินเดือนตายตัว</span><b>${emp.fixedSalary != null ? THB(emp.fixedSalary) + ' /เดือน' : 'ยังไม่ตั้ง'}</b></div>
+        <div class="summary-card"><span>เงินเดือนตายตัว</span><b>${emp.fixedSalary != null ? THB(emp.fixedSalary) + ' /รอบ' : 'ยังไม่ตั้ง'}</b></div>
         <div class="summary-card"><span>เบิกล่วงหน้ารวม (อนุมัติแล้ว ทั้งหมด)</span><b style="color:var(--warn)">-${THB(totalAdvance)}</b></div>
       `}
     </div>

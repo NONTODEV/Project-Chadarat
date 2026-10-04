@@ -157,7 +157,16 @@ export function renderDashboard() {
   const commission = periodSessions.reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
   const expenseTotal = periodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const packageRevenue = periodPackages.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
-  const netRevenue = revenue - commission - expenseTotal;
+  // แม่บ้านไม่มี session ให้นับค่าคอมจากที่นี่ เงินเดือนตายตัวของแม่บ้าน (fixedSalary ต่อรอบ
+  // ครึ่งเดือน) จึงไม่เคยถูกหักเป็นต้นทุนในหน้านี้เลยถ้าไม่บวกเข้ามาตรงนี้เอง — คูณตามจำนวนรอบ
+  // ที่ครอบคลุมในมุมมองนั้น (ครึ่งเดือน=1, เดือน=2, ปี=24) ส่วนมุมมองรายวันไม่หัก เพราะเงินเดือน
+  // ตายตัวไม่ได้จ่ายเป็นรายวัน เฉลี่ยลงวันจะคลาดเคลื่อนมากกว่าไม่หักเลย
+  const housekeeperSalaryPerRound = state.employees
+    .filter((e) => e.active !== false && !isTherapist(e))
+    .reduce((sum, e) => sum + (Number(e.fixedSalary) || 0), 0);
+  const housekeeperRounds = periodType === 'half-month' ? 1 : periodType === 'monthly' ? 2 : periodType === 'yearly' ? 24 : 0;
+  const housekeeperCost = housekeeperSalaryPerRound * housekeeperRounds;
+  const netRevenue = revenue - commission - expenseTotal - housekeeperCost;
 
   const recentSessions = [...periodSessions]
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
@@ -224,6 +233,7 @@ export function renderDashboard() {
       <div class="summary-card"><span>รายได้ร้าน (${esc(periodLabel)})</span><b>${THB(revenue)}</b></div>
       <div class="summary-card"><span>ค่าคอม (${esc(periodLabel)})</span><b>${THB(commission)}</b></div>
       <div class="summary-card"><span>รายจ่ายจิปาถะ (${esc(periodLabel)})</span><b>${THB(expenseTotal)}</b></div>
+      ${housekeeperCost > 0 ? `<div class="summary-card"><span>เงินเดือนแม่บ้าน (${esc(periodLabel)})</span><b>${THB(housekeeperCost)}</b></div>` : ''}
       <div class="summary-card"><span>รายได้สุทธิ (${esc(periodLabel)})</span><b style="color:${netRevenue < 0 ? 'var(--bad)' : 'var(--good)'}">${THB(netRevenue)}</b></div>
       <div class="summary-card"><span>ยอดขายแพ็กเกจ (${esc(periodLabel)})</span><b>${THB(packageRevenue)}</b></div>
     </div>

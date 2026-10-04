@@ -52,10 +52,9 @@ export function renderPayroll() {
   const rows = relevantEmployees.map((emp) => {
     const therapist = isTherapist(emp);
     const rawCommission = therapist ? commissionForEmployeeInHalfMonth(emp.id, currentPeriod) : 0;
-    // emp.fixedSalary เป็นเงินเดือน "ต่อเดือน" (ตั้งใจให้กรอกแบบนั้น ดูข้อความในหน้าพนักงาน) แต่
-    // งวดจ่ายเงินตัดทุกครึ่งเดือน จึงต้องหารสองก่อน ไม่งั้นแม่บ้านจะได้เงินเดือนเต็มจำนวนทุกครึ่งเดือน
-    // (เบิ้ลเป็น 2 เท่าของเงินเดือนจริงต่อเดือน)
-    const base = therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0) / 2;
+    // emp.fixedSalary คือยอดที่จ่าย "ต่อรอบ" (ต่อครึ่งเดือน) อยู่แล้ว ไม่ใช่ยอดเต็มเดือน — ไม่ต้อง
+    // หารสอง (เงินเดือนเต็มเดือน = fixedSalary x 2 รอบ)
+    const base = therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0);
     const guaranteeTopUp = therapist ? base - rawCommission : 0;
     const balanceBefore = outstandingBalanceBeforeMonth(emp.id, currentPeriod);
     const override = deductionOverrideForMonth(emp.id, currentPeriod);
