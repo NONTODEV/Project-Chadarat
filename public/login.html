@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>เข้าสู่ระบบ - ชฎารัตน์ นวดเพื่อสุขภาพ</title>
+  <meta name="description" content="เข้าสู่ระบบจัดการร้าน ชฎารัตน์ นวดเพื่อสุขภาพ อุบลราชธานี" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 2rem; width: 100%; max-width: 320px; }
+    .login-card h1 { font-size: 1.1rem; margin-top: 0; }
+    #error { color: var(--bad); font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+    .login-card button[type="submit"] { width: 100%; margin-top: 0.5rem; }
+    .password-field { position: relative; }
+    .password-field input { padding-right: 56px; }
+    .password-field .toggle-pw { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-dim); font-size: .78rem; cursor: pointer; padding: 4px 8px; }
+  </style>
+</head>
+<body>
+  <form class="login-card" id="login-form">
+    <h1>💆 เข้าสู่ระบบผู้ดูแล</h1>
+    <div class="field">
+      <label>ชื่อผู้ใช้</label>
+      <input type="text" id="email" required autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>รหัสผ่าน</label>
+      <div class="password-field">
+        <input type="password" id="password" required autocomplete="current-password" />
+        <button type="button" class="toggle-pw" id="togglePw">แสดง</button>
+      </div>
+    </div>
+    <div id="error"></div>
+    <button type="submit" class="btn primary">เข้าสู่ระบบ</button>
+  </form>
+
+  <div class="site-footer" style="position:fixed;bottom:0;left:0;right:0">Powered by <strong>404NotFound</strong> · SINCE 2026</div>
+
+  <script>
+    // Global safety net: if any script on this page throws (e.g. a blocked
+    // CDN request), surface it instead of silently leaving the page inert.
+    window.addEventListener('error', (e) => {
+      const el = document.getElementById('error');
+      if (el) el.textContent = 'เกิดข้อผิดพลาด: ' + (e.message || e.error);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const el = document.getElementById('error');
+      if (el) el.textContent = 'เกิดข้อผิดพลาด: ' + (e.reason?.message || e.reason);
+    });
+  </script>
+  <script type="module">
+    import { auth } from "/js/firebase-config.js";
+    import { signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) window.location.href = "/dashboard.html";
+    });
+
+    const form = document.getElementById("login-form");
+    const errorEl = document.getElementById("error");
+    const passwordInput = document.getElementById("password");
+    const togglePw = document.getElementById("togglePw");
+
+    togglePw.addEventListener("click", () => {
+      const show = passwordInput.type === "password";
+      passwordInput.type = show ? "text" : "password";
+      togglePw.textContent = show ? "ซ่อน" : "แสดง";
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      const input = document.getElementById("email").value.trim().toLowerCase();
+      const password = document.getElementById("password").value;
+      const email = input.includes("@") ? input : `${input}@project-chadarat.local`;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        window.location.href = "/dashboard.html";
+      } catch (err) {
+        errorEl.textContent = `เข้าสู่ระบบไม่สำเร็จ (${err.code || err.message}): ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง`;
+        console.error(err);
+      }
+    });
+  </script>
+  <script type="module" src="/js/theme.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ประวัติพนักงาน - ชฎารัตน์ นวดเพื่อสุขภาพ</title>
+  <meta name="description" content="ประวัติการทำงาน เบิกเงินล่วงหน้า และการลาของพนักงาน ชฎารัตน์ นวดเพื่อสุขภาพ อุบลราชธานี" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .page { max-width: 820px; margin: 0 auto; padding: 24px 20px 60px; }
+    .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); text-decoration: none; font-size: .85rem; margin-bottom: 16px; }
+    .back-link:hover { color: var(--text); }
+    .emp-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .emp-header h1 { margin: 0 0 4px; font-size: 1.3rem; }
+    #globalError { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 200; background: var(--bad); color: #fff; padding: 10px 16px; font-size: .85rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="globalError"></div>
+  <script>
+    function showGlobalError(msg) {
+      const el = document.getElementById('globalError');
+      el.textContent = 'เกิดข้อผิดพลาด: ' + msg;
+      el.style.display = 'block';
+    }
+    window.addEventListener('error', (e) => showGlobalError(e.message || e.error));
+    window.addEventListener('unhandledrejection', (e) => showGlobalError(e.reason?.message || e.reason));
+  </script>
+
+  <div class="page">
+    <a href="/dashboard.html#employees" class="back-link">← กลับไปหน้าพนักงาน</a>
+    <div id="emp-content">กำลังโหลด...</div>
+    <footer class="site-footer">Powered by <strong>404NotFound</strong> · SINCE 2026</footer>
+  </div>
+
+  <div id="toastHost"></div>
+
+  <script type="module" src="/js/theme.js"></script>
+  <script type="module" src="/js/employee-page.js"></script>
+</body>
+</html>
