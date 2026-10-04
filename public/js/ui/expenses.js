@@ -1,6 +1,6 @@
 import { state } from '../store.js';
 import { expensesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
@@ -134,17 +134,18 @@ export function initExpenseModal() {
     if (e.target.id === 'expModalBg') closeModal();
   });
 
-  document.getElementById('exp_delete').addEventListener('click', async () => {
+  guardClick(document.getElementById('exp_delete'), async () => {
     const expense = state.expenses.find((e) => e.id === editingId);
     closeModal();
     if (expense) await removeExpense(expense);
   });
 
-  document.getElementById('exp_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('exp_save'), async () => {
     const title = document.getElementById('exp_title').value.trim();
     const amount = Number(document.getElementById('exp_amount').value);
     const date = document.getElementById('exp_date').value;
-    if (!title || !amount || !date) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+    if (!title || !date) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+    if (!(amount > 0)) { showToast('จำนวนเงินต้องมากกว่า 0'); return; }
 
     const id = editingId || uid();
     await expensesCrud.save(id, {

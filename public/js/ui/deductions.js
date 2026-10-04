@@ -1,6 +1,6 @@
 import { state } from '../store.js';
 import { deductionsCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
@@ -158,7 +158,7 @@ export function initDeductionsModal() {
     if (e.target.id === 'dedModalBg') closeModal();
   });
 
-  document.getElementById('ded_delete').addEventListener('click', async () => {
+  guardClick(document.getElementById('ded_delete'), async () => {
     if (!editingId) return;
     const ok = await showConfirm('ลบรายการหักเงินนี้?', true);
     if (!ok) return;
@@ -167,12 +167,13 @@ export function initDeductionsModal() {
     showToast('ลบแล้ว');
   });
 
-  document.getElementById('ded_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('ded_save'), async () => {
     const employeeId = document.getElementById('ded_employee').value;
     const employee = state.employees.find((e) => e.id === employeeId);
     const amount = Number(document.getElementById('ded_amount').value);
     const date = document.getElementById('ded_date').value;
-    if (!employee || !amount || !date) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+    if (!employee || !date) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+    if (!(amount > 0)) { showToast('จำนวนเงินต้องมากกว่า 0'); return; }
 
     await deductionsCrud.save(editingId || uid(), {
       employeeId, employeeName: employee.name,

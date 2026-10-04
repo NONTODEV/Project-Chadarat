@@ -163,10 +163,11 @@ export function renderDashboard() {
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     .slice(0, 10);
 
-  const currentMonthKey = todayISO().slice(0, 7);
+  // '9999-99' อยู่หลังทุกงวดจริงเสมอ เพื่อให้ได้ยอดเบิกค้าง "ปัจจุบันจริง" ที่ไม่ขึ้นกับว่า
+  // ตอนนี้เดือน/ครึ่งเดือนไหน (สอดคล้องกับวิธีคิดในหน้าเงินเดือน)
   const dailyBreakdown = dailyEmployeeBreakdown(periodSessions).map((row) => ({
     ...row,
-    owed: outstandingBalanceBeforeMonth(row.employeeId, currentMonthKey),
+    owed: outstandingBalanceBeforeMonth(row.employeeId, '9999-99'),
   }));
   const dayGroups = periodType === 'daily' ? [] : groupByDay(dailyBreakdown);
 
@@ -185,7 +186,7 @@ export function renderDashboard() {
         hasIssue: match ? match.hasIssue : false,
         hasRecord: !!match,
         onLeave: leavesToday.some((l) => l.employeeId === e.id),
-        owed: outstandingBalanceBeforeMonth(e.id, currentMonthKey),
+        owed: outstandingBalanceBeforeMonth(e.id, '9999-99'),
       };
     })
     .sort((a, b) => (a.employeeName || '').localeCompare(b.employeeName || '', 'th'));

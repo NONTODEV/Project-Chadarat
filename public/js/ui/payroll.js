@@ -6,7 +6,7 @@ import {
   otherDeductionsForEmployeeInHalfMonth, otherDeductionOverrideForMonth, deductionsForEmployeeInHalfMonth,
 } from '../store.js';
 import { payrollCrud, payrollDeductionsCrud, settingsCrud } from '../firestore-service.js';
-import { esc, showToast, showConfirm, THB, fmtDate, halfMonthLabel } from '../utils.js';
+import { esc, showToast, showConfirm, THB, fmtDate, halfMonthLabel, guardClick } from '../utils.js';
 
 // Period key format: "YYYY-MM-H1" (1st-15th, paid on the 16th) or
 // "YYYY-MM-H2" (16th-end of month, paid on the 1st of the next month).
@@ -99,7 +99,7 @@ export function renderPayroll() {
     renderPayroll();
   });
 
-  document.getElementById('pay_minWage_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('pay_minWage_save'), async () => {
     const value = Number(document.getElementById('pay_minWage').value);
     if (!value || value <= 0) { showToast('กรุณากรอกตัวเลขที่ถูกต้อง'); return; }
     await settingsCrud.save({ minDailyWage: value });
@@ -164,8 +164,11 @@ function rowHtml({ emp, therapist, base, rawCommission, guaranteeTopUp, balanceB
     ? `<div>${THB(base)}${guaranteeTopUp > 0 ? `<div class="cell-sub">ค่าคอมจริง ${THB(rawCommission)} + ประกัน ${THB(guaranteeTopUp)}</div>` : ''}</div>`
     : `<div>${THB(base)} <span class="cell-sub">(เงินเดือนตายตัว)</span></div>`;
 
+  // เช็คที่ advance (ยอดหักจริง) ไม่ใช่ balanceBefore (ยอดหนี้ที่ระบบคำนวณได้) เพราะแอดมิน
+  // อาจตั้งยอดหักเองไว้มากกว่า 0 ทั้งที่ระบบคำนวณยอดหนี้ได้ 0 (เช่น ยอดหนี้เดิมคลาดเคลื่อน) —
+  // ถ้าเช็คที่ balanceBefore จะซ่อนยอดหักจริงที่กำลังใช้อยู่ไปเฉยๆ
   let advanceCell;
-  if (balanceBefore <= 0) {
+  if (advance <= 0 && balanceBefore <= 0) {
     advanceCell = '-';
   } else {
     advanceCell = `
@@ -290,7 +293,10 @@ function updatePayModalNet() {
   if (!deductingRow) return;
   const advanceAmt = Number(document.getElementById('deduct_amount').value) || 0;
   const otherAmt = Number(document.getElementById('deduct_other_amount').value) || 0;
-  document.getElementById('deduct_net').textContent = THB(deductingRow.base - advanceAmt - otherAmt);
+  const net = deductingRow.base - advanceAmt - otherAmt;
+  const netEl = document.getElementById('deduct_net');
+  netEl.textContent = THB(net);
+  netEl.style.color = net < 0 ? 'var(--bad)' : '';
 }
 
 function closeDeductModal() {
@@ -306,7 +312,7 @@ export function initDeductModal() {
   document.getElementById('deduct_amount').addEventListener('input', updatePayModalNet);
   document.getElementById('deduct_other_amount').addEventListener('input', updatePayModalNet);
 
-  document.getElementById('deduct_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('deduct_save'), async () => {
     if (!deductingRow) return;
     const { emp, balanceBefore, base } = deductingRow;
     // ไม่ล็อกเพดานไว้ที่ยอดเบิกค้าง (balanceBefore) อีกต่อไป เพราะถ้าตัวเลขนั้นคลาดเคลื่อน
@@ -315,6 +321,11 @@ export function initDeductModal() {
     const advanceAmount = Math.max(0, Number(document.getElementById('deduct_amount').value) || 0);
     const otherAmount = Math.max(0, Number(document.getElementById('deduct_other_amount').value) || 0);
     const net = base - advanceAmount - otherAmount;
+
+    if (net < 0) {
+      const ok = await showConfirm(`สุทธิที่จะจ่ายติดลบ (${THB(net)}) ยืนยันว่าจะหักเท่านี้จริงหรือไม่?`, true);
+      if (!ok) return;
+    }
 
     await payrollDeductionsCrud.save(`${currentPeriod}_${emp.id}`, {
       employeeId: emp.id, employeeName: emp.name, month: currentPeriod,

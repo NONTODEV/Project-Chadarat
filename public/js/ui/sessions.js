@@ -1,6 +1,6 @@
 import { state, isTherapist, durations } from '../store.js';
 import { sessionsCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupSessionsByPeriod } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupSessionsByPeriod, guardClick } from '../utils.js';
 
 // จำนวนครั้งที่เหลือของแพ็กเกจ นับจากรายการนวดที่ผูก packageId นี้ไว้จริง (ไม่ใช่ตัวเลขแยก
 // ที่ต้องคอยอัปเดตเอง) — เลือกแพ็กเกจตอนบันทึกการนวดเมื่อไหร่ก็ถูกนับที่นี่โดยอัตโนมัติ
@@ -325,7 +325,7 @@ export function initSessionModal() {
     renderItemRows(current);
   });
 
-  document.getElementById('ses_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('ses_save'), async () => {
     const employeeId = document.getElementById('ses_employee').value;
     const date = document.getElementById('ses_date').value;
     const employee = state.employees.find((e) => e.id === employeeId);
@@ -354,6 +354,24 @@ export function initSessionModal() {
     if (!items.length || items.some((it) => !it.serviceId)) {
       showToast('กรุณาเลือกบริการให้ครบทุกรายการ');
       return;
+    }
+
+    // แถวหลายรายการในการนวดครั้งเดียวกัน อาจเลือกแพ็กเกจเดียวกันซ้ำกันโดยไม่รู้ตัว (แต่ละแถว
+    // เห็นแพ็กเกจนี้เหลือพอตอนเลือก เพราะยังไม่มีแถวไหนบันทึกจริงลง state.sessions) เช็กรวมกัน
+    // ทุกแถวก่อนบันทึกจริง เพื่อไม่ให้ใช้แพ็กเกจเกินจำนวนที่เหลือจริง
+    if (!editingId) {
+      const requestedPerPackage = new Map();
+      for (const it of items) {
+        if (!it.packageId) continue;
+        requestedPerPackage.set(it.packageId, (requestedPerPackage.get(it.packageId) || 0) + 1);
+      }
+      for (const [packageId, requested] of requestedPerPackage) {
+        const pkg = state.packages.find((p) => p.id === packageId);
+        if (pkg && requested > packageRemaining(pkg)) {
+          showToast(`แพ็กเกจของ "${pkg.customerName}" เหลือ ${packageRemaining(pkg)} ครั้ง แต่เลือกใช้ ${requested} รายการในครั้งนี้`);
+          return;
+        }
+      }
     }
 
     if (editingId) {

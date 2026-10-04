@@ -1,6 +1,6 @@
-import { state, isSuperAdmin } from '../store.js';
+import { state, isSuperAdmin, outstandingBalanceBeforeMonth } from '../store.js';
 import { employeesCrud, sessionsCrud, advancesCrud, servicesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, avatarHtml } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, avatarHtml, guardClick } from '../utils.js';
 import { IMPORTED_EMPLOYEES, IMPORTED_SESSIONS, IMPORTED_ADVANCES } from '../data/seed-history.js';
 import { SEED_SERVICES } from '../data/seed-services.js';
 
@@ -111,7 +111,11 @@ function closeModal() {
 }
 
 async function removeEmployee(emp) {
-  const ok = await showConfirm(`ลบพนักงาน "${emp.name}"? ประวัติการนวดจะยังอยู่`, true);
+  const owed = outstandingBalanceBeforeMonth(emp.id, '9999-99');
+  const message = owed > 0
+    ? `พนักงาน "${emp.name}" ยังมียอดเบิกล่วงหน้าค้างอยู่ ${owed.toLocaleString('th-TH')} บาท — ลบแล้วจะจัดการยอดนี้จากหน้าเงินเดือนไม่ได้อีก (แนะนำให้ปิด "ยังทำงานอยู่" แทนการลบ) ยืนยันจะลบเลยหรือไม่?`
+    : `ลบพนักงาน "${emp.name}"? ประวัติการนวดจะยังอยู่`;
+  const ok = await showConfirm(message, true);
   if (!ok) return;
   await employeesCrud.remove(emp.id);
   showToast('ลบแล้ว');
@@ -124,13 +128,13 @@ export function initEmployeeModal() {
   });
   document.getElementById('emp_role').addEventListener('change', toggleFixedSalaryField);
 
-  document.getElementById('emp_delete').addEventListener('click', async () => {
+  guardClick(document.getElementById('emp_delete'), async () => {
     const emp = state.employees.find((e) => e.id === editingId);
     closeModal();
     if (emp) await removeEmployee(emp);
   });
 
-  document.getElementById('emp_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('emp_save'), async () => {
     const name = document.getElementById('emp_name').value.trim();
     if (!name) { showToast('กรุณากรอกชื่อพนักงาน'); return; }
     const role = document.getElementById('emp_role').value;

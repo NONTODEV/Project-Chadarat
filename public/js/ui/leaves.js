@@ -1,6 +1,6 @@
 import { state, countLeaveDays } from '../store.js';
 import { leavesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, todayISO, groupByPeriod } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, todayISO, groupByPeriod, guardClick } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
@@ -183,13 +183,27 @@ export function initLeaveModal() {
     if (endInput.value < e.target.value) endInput.value = e.target.value;
   });
 
-  document.getElementById('lv_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('lv_save'), async () => {
     const employeeId = document.getElementById('lv_employee').value;
     const employee = state.employees.find((e) => e.id === employeeId);
     const startDate = document.getElementById('lv_startDate').value;
     const endDate = document.getElementById('lv_endDate').value;
     if (!employee || !startDate || !endDate) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
     if (endDate < startDate) { showToast('วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มลา'); return; }
+
+    const overlapping = state.leaves.some((l) => l.id !== editingId && l.employeeId === employeeId
+      && l.status !== 'rejected' && l.startDate <= endDate && l.endDate >= startDate);
+    if (overlapping) {
+      const ok = await showConfirm(`${employee.name} มีรายการลาช่วงที่ทับกับช่วงนี้อยู่แล้ว ต้องการบันทึกซ้อนกันหรือไม่?`, true);
+      if (!ok) return;
+    }
+
+    const hasSessionOnLeaveDay = state.sessions.some((s) => s.employeeId === employeeId
+      && s.date >= startDate && s.date <= endDate);
+    if (hasSessionOnLeaveDay) {
+      const ok = await showConfirm(`${employee.name} มีบันทึกการนวดอยู่แล้วในช่วงวันที่ลานี้ ต้องการบันทึกการลาต่อหรือไม่?`, true);
+      if (!ok) return;
+    }
 
     const existing = state.leaves.find((l) => l.id === editingId);
     await leavesCrud.save(editingId || uid(), {

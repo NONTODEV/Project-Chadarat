@@ -1,10 +1,11 @@
 import { state } from '../store.js';
 import { advancesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
 let expandedEmployees = new Set();
+let editingId = null;
 
 export function renderAdvances() {
   const el = document.getElementById('advances');
@@ -50,7 +51,7 @@ export function renderAdvances() {
     selectedLabel = e.target.value;
     renderAdvances();
   });
-  document.getElementById('adv_add').addEventListener('click', openModal);
+  document.getElementById('adv_add').addEventListener('click', () => openModal());
 
   el.querySelectorAll('[data-toggle-employee]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -64,6 +65,7 @@ export function renderAdvances() {
   rows.forEach((a) => {
     el.querySelector(`[data-approve="${a.id}"]`)?.addEventListener('click', () => setStatus(a, 'approved'));
     el.querySelector(`[data-reject="${a.id}"]`)?.addEventListener('click', () => setStatus(a, 'rejected'));
+    el.querySelector(`[data-edit="${a.id}"]`)?.addEventListener('click', () => openModal(a));
     el.querySelector(`[data-delete="${a.id}"]`)?.addEventListener('click', () => removeAdvance(a));
   });
 }
@@ -112,8 +114,10 @@ function statusPill(status) {
 function rowHtml(a) {
   const actions = a.status === 'pending'
     ? `<button class="btn small" data-approve="${a.id}">อนุมัติ</button>
-       <button class="btn small danger" data-reject="${a.id}">ปฏิเสธ</button>`
-    : `<button class="btn small danger" data-delete="${a.id}">ลบ</button>`;
+       <button class="btn small danger" data-reject="${a.id}">ปฏิเสธ</button>
+       <button class="btn small" data-edit="${a.id}">แก้ไข</button>`
+    : `<button class="btn small" data-edit="${a.id}">แก้ไข</button>
+       <button class="btn small danger" data-delete="${a.id}">ลบ</button>`;
   return `
     <tr>
       <td data-label="วันที่">${fmtDate(a.date)}</td>
@@ -142,18 +146,31 @@ function stripId(a) {
   return rest;
 }
 
-function openModal() {
+function openModal(advance) {
+  editingId = advance ? advance.id : null;
+  document.getElementById('advModalTitle').textContent = advance ? 'แก้ไขเบิกเงินล่วงหน้า' : 'เบิกเงินล่วงหน้า';
+
   const empSel = document.getElementById('adv_employee');
   empSel.innerHTML = state.employees.filter((e) => e.active !== false)
     .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
-  document.getElementById('adv_date').value = todayISO();
-  document.getElementById('adv_amount').value = '';
-  document.getElementById('adv_reason').value = '';
+
+  if (advance) {
+    empSel.value = advance.employeeId;
+    document.getElementById('adv_date').value = advance.date;
+    document.getElementById('adv_amount').value = advance.amount;
+    document.getElementById('adv_reason').value = advance.reason || '';
+  } else {
+    document.getElementById('adv_date').value = todayISO();
+    document.getElementById('adv_amount').value = '';
+    document.getElementById('adv_reason').value = '';
+  }
+  document.getElementById('adv_delete').style.display = advance ? 'inline-block' : 'none';
   document.getElementById('advModalBg').classList.add('open');
 }
 
 function closeModal() {
   document.getElementById('advModalBg').classList.remove('open');
+  editingId = null;
 }
 
 export function initAdvanceModal() {
@@ -162,20 +179,32 @@ export function initAdvanceModal() {
     if (e.target.id === 'advModalBg') closeModal();
   });
 
-  document.getElementById('adv_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('adv_delete'), async () => {
+    if (!editingId) return;
+    const advance = state.advances.find((a) => a.id === editingId);
+    const ok = await showConfirm(`ลบรายการเบิกของ "${advance?.employeeName || ''}"?`, true);
+    if (!ok) return;
+    await advancesCrud.remove(editingId);
+    closeModal();
+    showToast('ลบแล้ว');
+  });
+
+  guardClick(document.getElementById('adv_save'), async () => {
     const employeeId = document.getElementById('adv_employee').value;
     const employee = state.employees.find((e) => e.id === employeeId);
     const amount = Number(document.getElementById('adv_amount').value);
     const date = document.getElementById('adv_date').value;
-    if (!employee || !amount || !date) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+    if (!employee || !date) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+    if (!(amount > 0)) { showToast('จำนวนเงินต้องมากกว่า 0'); return; }
 
-    await advancesCrud.save(uid(), {
+    const existing = editingId ? state.advances.find((a) => a.id === editingId) : null;
+    await advancesCrud.save(editingId || uid(), {
       employeeId, employeeName: employee.name,
       amount, date,
       reason: document.getElementById('adv_reason').value.trim(),
-      status: 'approved',
+      status: existing ? existing.status : 'approved',
     });
     closeModal();
-    showToast('บันทึกเบิกล่วงหน้าแล้ว');
+    showToast(editingId ? 'แก้ไขรายการเบิกแล้ว' : 'บันทึกเบิกล่วงหน้าแล้ว');
   });
 }

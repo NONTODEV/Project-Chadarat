@@ -7,6 +7,20 @@ export function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// ป้องกันดับเบิลคลิกปุ่มบันทึก (ซึ่งจะสร้างเอกสารซ้ำเพราะ uid() สุ่มใหม่ทุกครั้ง) โดยปิดปุ่ม
+// ไว้ระหว่างที่ handler แบบ async ยังทำงานไม่จบ แล้วเปิดกลับคืนเมื่อเสร็จ (ไม่ว่าสำเร็จหรือ error)
+export function guardClick(btn, handler) {
+  btn.addEventListener('click', async (e) => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      await handler(e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 function toLocalISODate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');

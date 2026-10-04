@@ -1,6 +1,6 @@
 import { state, durations } from '../store.js';
 import { servicesCrud, settingsCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, THB } from '../utils.js';
+import { esc, showConfirm, showToast, uid, THB, guardClick } from '../utils.js';
 import { SEED_SERVICES } from '../data/seed-services.js';
 
 let editingId = null;
@@ -44,7 +44,7 @@ export function renderServices() {
 
   el.querySelector('#svc_add').addEventListener('click', () => openModal(null));
 
-  el.querySelector('#svc_seed').addEventListener('click', async () => {
+  guardClick(el.querySelector('#svc_seed'), async () => {
     const ok = await showConfirm('นำเข้าข้อมูลเริ่มต้น 14 รายการ? รายการที่มี id ซ้ำจะถูกเขียนทับ');
     if (!ok) return;
     for (const service of SEED_SERVICES) {
@@ -54,7 +54,7 @@ export function renderServices() {
     showToast('นำเข้าข้อมูลเริ่มต้นสำเร็จ');
   });
 
-  el.querySelector('#add_duration').addEventListener('click', async () => {
+  guardClick(el.querySelector('#add_duration'), async () => {
     const input = document.getElementById('new_duration');
     const value = Math.round(Number(input.value));
     if (!value || value <= 0) { showToast('กรุณากรอกจำนวนนาทีที่ถูกต้อง'); return; }
@@ -64,7 +64,7 @@ export function renderServices() {
   });
 
   el.querySelectorAll('[data-remove-duration]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    guardClick(btn, async () => {
       const value = Number(btn.dataset.removeDuration);
       const ok = await showConfirm(`ลบระยะเวลา ${value} นาทีออกจากตัวเลือก?`, true);
       if (!ok) return;
@@ -127,13 +127,13 @@ export function initServiceModal() {
     if (e.target.id === 'svcModalBg') closeModal();
   });
 
-  document.getElementById('svc_delete').addEventListener('click', async () => {
+  guardClick(document.getElementById('svc_delete'), async () => {
     const svc = state.services.find((s) => s.id === editingId);
     closeModal();
     if (svc) await removeService(svc);
   });
 
-  document.getElementById('svc_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('svc_save'), async () => {
     const name = document.getElementById('svc_name_input').value.trim();
     if (!name) { showToast('กรุณากรอกชื่อบริการ'); return; }
 

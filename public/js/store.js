@@ -302,12 +302,16 @@ export function availableMonths() {
   state.advances.forEach((a) => a.date && set.add(a.date.slice(0, 7)));
   state.leaves.forEach((l) => l.startDate && set.add(l.startDate.slice(0, 7)));
   state.expenses.forEach((e) => e.date && set.add(e.date.slice(0, 7)));
+  state.packages.forEach((p) => p.purchaseDate && set.add(p.purchaseDate.slice(0, 7)));
+  state.deductions.forEach((d) => d.date && set.add(d.date.slice(0, 7)));
   set.add(localDateParts().month);
   return Array.from(set).sort().reverse();
 }
 
 export function revenueForMonth(month) {
-  return sessionsForMonth(month).reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
+  const sessionRevenue = sessionsForMonth(month).reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
+  const packageRevenue = packagesForMonth(month).reduce((sum, p) => sum + (Number(p.price) || 0), 0);
+  return sessionRevenue + packageRevenue;
 }
 
 export function expenseTotalForMonth(month) {
@@ -329,6 +333,8 @@ export function availableYears() {
   state.advances.forEach((a) => a.date && set.add(a.date.slice(0, 4)));
   state.leaves.forEach((l) => l.startDate && set.add(l.startDate.slice(0, 4)));
   state.expenses.forEach((e) => e.date && set.add(e.date.slice(0, 4)));
+  state.packages.forEach((p) => p.purchaseDate && set.add(p.purchaseDate.slice(0, 4)));
+  state.deductions.forEach((d) => d.date && set.add(d.date.slice(0, 4)));
   set.add(localDateParts().year);
   return Array.from(set).sort().reverse();
 }

@@ -1,6 +1,6 @@
 import { state, durations } from '../store.js';
 import { packagesCrud, packageTemplatesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, guardClick } from '../utils.js';
 
 let expandedPackages = new Set();
 let editingId = null;
@@ -167,7 +167,7 @@ export function initPackageModal() {
     document.getElementById('pkg_price').value = tpl.price;
   });
 
-  document.getElementById('pkg_delete').addEventListener('click', async () => {
+  guardClick(document.getElementById('pkg_delete'), async () => {
     if (!editingId) return;
     const ok = await showConfirm('ลบแพ็กเกจนี้?', true);
     if (!ok) return;
@@ -176,7 +176,7 @@ export function initPackageModal() {
     showToast('ลบแล้ว');
   });
 
-  document.getElementById('pkg_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('pkg_save'), async () => {
     const customerName = document.getElementById('pkg_customerName').value.trim();
     const purchaseDate = document.getElementById('pkg_purchaseDate').value;
     if (!customerName || !purchaseDate) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
@@ -184,6 +184,9 @@ export function initPackageModal() {
     const serviceId = document.getElementById('pkg_service').value;
     const service = state.services.find((s) => s.id === serviceId);
     const priceRaw = document.getElementById('pkg_price').value;
+    const purchasedSessions = Math.max(0, Number(document.getElementById('pkg_purchased').value) || 0);
+    const bonusSessions = Math.max(0, Number(document.getElementById('pkg_bonus').value) || 0);
+    const price = priceRaw === '' ? null : Math.max(0, Number(priceRaw) || 0);
 
     const id = editingId || uid();
     await packagesCrud.save(id, {
@@ -192,9 +195,9 @@ export function initPackageModal() {
       serviceId: serviceId || null,
       serviceName: service ? service.name : 'ทุกบริการ',
       duration: Number(document.getElementById('pkg_duration').value) || null,
-      purchasedSessions: Number(document.getElementById('pkg_purchased').value) || 0,
-      bonusSessions: Number(document.getElementById('pkg_bonus').value) || 0,
-      price: priceRaw === '' ? null : Number(priceRaw),
+      purchasedSessions,
+      bonusSessions,
+      price,
       purchaseDate,
     });
     closeModal();
@@ -228,7 +231,7 @@ export function initPackageTemplateModal() {
     if (e.target.id === 'pkgTplModalBg') closeTemplateModal();
   });
 
-  document.getElementById('pkgTpl_delete').addEventListener('click', async () => {
+  guardClick(document.getElementById('pkgTpl_delete'), async () => {
     if (!editingTemplateId) return;
     const ok = await showConfirm('ลบเทมเพลตนี้?', true);
     if (!ok) return;
@@ -237,7 +240,7 @@ export function initPackageTemplateModal() {
     showToast('ลบแล้ว');
   });
 
-  document.getElementById('pkgTpl_save').addEventListener('click', async () => {
+  guardClick(document.getElementById('pkgTpl_save'), async () => {
     const name = document.getElementById('pkgTpl_name').value.trim();
     const price = document.getElementById('pkgTpl_price').value;
     if (!name || price === '') { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
@@ -251,9 +254,9 @@ export function initPackageTemplateModal() {
       serviceId: serviceId || null,
       serviceName: service ? service.name : 'ทุกบริการ',
       duration: Number(document.getElementById('pkgTpl_duration').value) || null,
-      purchasedSessions: Number(document.getElementById('pkgTpl_purchased').value) || 0,
-      bonusSessions: Number(document.getElementById('pkgTpl_bonus').value) || 0,
-      price: Number(price),
+      purchasedSessions: Math.max(0, Number(document.getElementById('pkgTpl_purchased').value) || 0),
+      bonusSessions: Math.max(0, Number(document.getElementById('pkgTpl_bonus').value) || 0),
+      price: Math.max(0, Number(price) || 0),
     });
     closeTemplateModal();
     showToast(editingTemplateId ? 'แก้ไขเทมเพลตแล้ว' : 'เพิ่มเทมเพลตแล้ว');

@@ -133,7 +133,7 @@
       <div class="modal-body">
         <h3 id="expModalTitle">เพิ่มรายจ่าย</h3>
         <div class="field"><label>รายการ</label><input id="exp_title" placeholder="เช่น ค่าน้ำ, ค่าไฟ, ซื้อน้ำมันนวด" /></div>
-        <div class="field"><label>จำนวนเงิน</label><input type="number" id="exp_amount" /></div>
+        <div class="field"><label>จำนวนเงิน</label><input type="number" id="exp_amount" min="0" step="any" /></div>
         <div class="field"><label>วันที่</label><input type="date" id="exp_date" /></div>
         <div class="field"><label>หมายเหตุ</label><input id="exp_note" /></div>
       </div>
@@ -226,15 +226,16 @@
   <div class="modal-bg" id="advModalBg">
     <div class="modal">
       <div class="modal-body">
-        <h3>เบิกเงินล่วงหน้า</h3>
+        <h3 id="advModalTitle">เบิกเงินล่วงหน้า</h3>
         <div class="field"><label>พนักงาน</label><select id="adv_employee"></select></div>
-        <div class="field"><label>จำนวนเงิน</label><input type="number" id="adv_amount" /></div>
+        <div class="field"><label>จำนวนเงิน</label><input type="number" id="adv_amount" min="0" step="any" /></div>
         <div class="field"><label>วันที่</label><input type="date" id="adv_date" /></div>
         <div class="field"><label>เหตุผล</label><input id="adv_reason" /></div>
         <p class="cell-sub">ยอดนี้จะถูกหักจากเงินเดือนเต็มจำนวนในเดือนนั้นโดยอัตโนมัติ เว้นแต่จะไปปรับยอดหักเองที่หน้าเงินเดือน</p>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" id="adv_cancel">ยกเลิก</button>
+        <button class="btn danger" id="adv_delete" style="display:none">ลบ</button>
         <button class="btn primary" id="adv_save">บันทึก</button>
       </div>
     </div>
@@ -246,7 +247,7 @@
       <div class="modal-body">
         <h3 id="dedModalTitle">หักเงินพนักงาน</h3>
         <div class="field"><label>พนักงาน</label><select id="ded_employee"></select></div>
-        <div class="field"><label>จำนวนเงิน</label><input type="number" id="ded_amount" /></div>
+        <div class="field"><label>จำนวนเงิน</label><input type="number" id="ded_amount" min="0" step="any" /></div>
         <div class="field"><label>วันที่</label><input type="date" id="ded_date" /></div>
         <div class="field"><label>เหตุผล</label><input id="ded_reason" placeholder="เช่น ค่าปรับมาสาย, ค่าเสียหายอุปกรณ์" /></div>
         <p class="cell-sub">ยอดนี้จะถูกหักออกจากเงินเดือนงวดนั้นตรงๆ (คนละส่วนกับเบิกเงินล่วงหน้า เพราะไม่ใช่เงินที่เคยจ่ายให้ล่วงหน้า)</p>
@@ -327,9 +328,9 @@
         <div class="field"><label>เบอร์โทร</label><input id="pkg_customerPhone" /></div>
         <div class="field"><label>บริการ</label><select id="pkg_service"></select></div>
         <div class="field"><label>ระยะเวลา</label><select id="pkg_duration"></select></div>
-        <div class="field"><label>จำนวนครั้งที่ซื้อ</label><input type="number" id="pkg_purchased" /></div>
-        <div class="field"><label>จำนวนครั้งแถม</label><input type="number" id="pkg_bonus" /></div>
-        <div class="field"><label>ราคาที่จ่าย (บาท)</label><input type="number" id="pkg_price" /></div>
+        <div class="field"><label>จำนวนครั้งที่ซื้อ</label><input type="number" id="pkg_purchased" min="0" step="1" /></div>
+        <div class="field"><label>จำนวนครั้งแถม</label><input type="number" id="pkg_bonus" min="0" step="1" /></div>
+        <div class="field"><label>ราคาที่จ่าย (บาท)</label><input type="number" id="pkg_price" min="0" step="any" /></div>
         <div class="field"><label>วันที่ซื้อ</label><input type="date" id="pkg_purchaseDate" /></div>
       </div>
       <div class="modal-actions">
@@ -348,9 +349,9 @@
         <div class="field"><label>ชื่อเทมเพลต</label><input id="pkgTpl_name" placeholder="เช่น นวดน้ำมัน 1 ชม. 10+1" /></div>
         <div class="field"><label>บริการ</label><select id="pkgTpl_service"></select></div>
         <div class="field"><label>ระยะเวลา</label><select id="pkgTpl_duration"></select></div>
-        <div class="field"><label>จำนวนครั้งที่ซื้อ</label><input type="number" id="pkgTpl_purchased" /></div>
-        <div class="field"><label>จำนวนครั้งแถม</label><input type="number" id="pkgTpl_bonus" /></div>
-        <div class="field"><label>ราคา (บาท)</label><input type="number" id="pkgTpl_price" /></div>
+        <div class="field"><label>จำนวนครั้งที่ซื้อ</label><input type="number" id="pkgTpl_purchased" min="0" step="1" /></div>
+        <div class="field"><label>จำนวนครั้งแถม</label><input type="number" id="pkgTpl_bonus" min="0" step="1" /></div>
+        <div class="field"><label>ราคา (บาท)</label><input type="number" id="pkgTpl_price" min="0" step="any" /></div>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" id="pkgTpl_cancel">ยกเลิก</button>
