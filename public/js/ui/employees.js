@@ -34,7 +34,7 @@ export function renderEmployees() {
 
 function rowHtml(emp) {
   const statusPill = emp.active === false
-    ? `<span class="pill neutral">ลาออกแล้ว</span>`
+    ? `<span class="pill neutral">ไม่ได้ทำ</span>`
     : `<span class="pill good">ทำงานอยู่</span>`;
   const rolePill = emp.role === 'housekeeper'
     ? `<span class="pill warn">แม่บ้าน</span>`
