@@ -2,42 +2,52 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // บัญชีทุกตัวในระบบนี้ใช้ email สังเคราะห์ลงท้าย @project-chadarat.local เท่านั้น (ไม่ใช่
+    // อีเมลจริงของใคร) — เช็กซัฟฟิกซ์นี้เป็นชั้นป้องกันเสริม เผื่อมีคนสมัครบัญชีผ่าน REST API
+    // ตรงๆ ด้วย apiKey ที่อยู่ในโค้ด (ยังต้องไปปิด Email/Password sign-up ใน Firebase Console
+    // ด้วย เพราะคนสมัครเองเลือกอีเมลเองได้ ชั้นนี้ป้องกันไม่ได้ร้อยเปอร์เซ็นต์ถ้า sign-up ยังเปิด)
+    function isStaff() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.matches('.*@project-chadarat[.]local$');
+    }
+
     match /services/{serviceId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isStaff();
     }
     match /employees/{employeeId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /sessions/{sessionId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /advances/{advanceId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /payroll/{payrollId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /payrollDeductions/{deductionId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /leaves/{leaveId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /settings/{settingId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /expenses/{expenseId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /packages/{packageId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /packageTemplates/{templateId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /deductions/{deductionId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isStaff();
     }
     match /{document=**} {
       allow read, write: if false;

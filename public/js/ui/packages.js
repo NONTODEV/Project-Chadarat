@@ -188,6 +188,15 @@ export function initPackageModal() {
     const bonusSessions = Math.max(0, Number(document.getElementById('pkg_bonus').value) || 0);
     const price = priceRaw === '' ? null : Math.max(0, Number(priceRaw) || 0);
 
+    if (editingId) {
+      const existingPkg = state.packages.find((p) => p.id === editingId);
+      const used = existingPkg ? usageSessionsFor(existingPkg).length : 0;
+      if (purchasedSessions + bonusSessions < used) {
+        showToast(`แพ็กเกจนี้ถูกใช้ไปแล้ว ${used} ครั้ง ลดจำนวนครั้งรวมให้ต่ำกว่านี้ไม่ได้`);
+        return;
+      }
+    }
+
     const id = editingId || uid();
     await packagesCrud.save(id, {
       customerName,

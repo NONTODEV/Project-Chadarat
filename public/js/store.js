@@ -218,14 +218,37 @@ export function totalApprovedAdvanceEver(employeeId) {
     .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 }
 
-export function totalDeductedBeforeMonth(employeeId, month) {
+// วันสุดท้ายของงวด ใช้กันไม่ให้เบิกที่ลงวันที่ "ในอนาคต" เทียบกับงวดที่กำลังดู ถูกนับว่าเป็นหนี้
+// ไปแล้ว (เช่น เบิกวันที่ 20 มิ.ย. ไม่ควรถูกหักในงวด 1-15 พ.ค. ที่ผ่านไปก่อนเบิกจะเกิดขึ้นจริง)
+function periodEndDate(month) {
+  if (month === '9999-99') return '9999-12-31'; // sentinel: "ไม่จำกัดอนาคต" ใช้ตอนขอยอดค้างจริงปัจจุบัน
+  if (month === '0000-00') return '0000-01-01'; // sentinel: ใช้เป็น label ของรายการ "เคลียร์ยอด" เท่านั้น ไม่ใช้เทียบวันที่
+  const base = month.slice(0, 7);
+  const [y, m] = base.split('-').map(Number);
+  if (month.endsWith('-H1')) return `${base}-15`;
+  const lastDay = new Date(y, m, 0).getDate(); // รองรับทั้ง "YYYY-MM-H2" และ "YYYY-MM" รุ่นเก่า
+  return `${base}-${String(lastDay).padStart(2, '0')}`;
+}
+
+function totalApprovedAdvanceUpToMonth(employeeId, month) {
+  const endDate = periodEndDate(month);
+  return state.advances
+    .filter((a) => a.employeeId === employeeId && a.status === 'approved' && (a.date || '') <= endDate)
+    .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+}
+
+// ไม่ใช้ "เดือนก่อนหน้า" (d.month < month) แบบเดิมแล้ว เพราะถ้าแอดมินจ่ายงวดไม่เรียงลำดับ (เช่น
+// จ่าย H2 ก่อน แล้วย้อนมาจ่าย H1) งวด H1 จะมองไม่เห็นยอดที่ถูกหักไปแล้วในงวด H2 (เพราะ H2 "มาหลัง"
+// H1 ตามชื่องวด) ทำให้หักเบิกซ้ำสองรอบ เปลี่ยนเป็น "ทุกงวดอื่นที่ไม่ใช่งวดนี้" แทน ซึ่งถูกต้องไม่ว่า
+// จะจ่ายตามลำดับเวลาจริงหรือไม่
+function totalDeductedExcludingMonth(employeeId, month) {
   return state.payrollDeductions
-    .filter((d) => d.employeeId === employeeId && d.month < month)
+    .filter((d) => d.employeeId === employeeId && d.month !== month)
     .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 }
 
 export function outstandingBalanceBeforeMonth(employeeId, month) {
-  return Math.max(0, totalApprovedAdvanceEver(employeeId) - totalDeductedBeforeMonth(employeeId, month));
+  return Math.max(0, totalApprovedAdvanceUpToMonth(employeeId, month) - totalDeductedExcludingMonth(employeeId, month));
 }
 
 export function deductionOverrideForMonth(employeeId, month) {
@@ -321,10 +344,13 @@ export function expenseTotalForMonth(month) {
 // Cash actually paid out via the Payroll page's "จ่ายแล้ว" toggle for the
 // month — 0 for any employee not yet marked paid, so it reflects money
 // that has really left the business rather than a theoretical estimate.
+// ต้นทุนแรงงานจริงของงวด = netPay (จ่ายสดตอนปิดงวด) + เบิกล่วงหน้าที่หักออกไปจาก netPay ไปแล้ว
+// เพราะเงินเบิกก็เป็นเงินสดที่จ่ายออกจากร้านจริงไปก่อนหน้าแล้ว (แค่จ่ายคนละเวลากับวันปิดงวด)
+// ใช้ grossCost ที่บันทึกไว้ตอนกดจ่าย ถ้าเป็นงวดเก่าก่อนมีฟิลด์นี้ ให้ fallback เป็น netPay ไปก่อน
 export function paidPayrollForMonth(month) {
   return state.payrollPayments
     .filter((p) => p.month === month)
-    .reduce((sum, p) => sum + (Number(p.netPay) || 0), 0);
+    .reduce((sum, p) => sum + (Number(p.grossCost ?? p.netPay) || 0), 0);
 }
 
 export function availableYears() {

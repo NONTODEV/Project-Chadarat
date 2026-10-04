@@ -129,7 +129,7 @@ function openModal(deduction) {
   document.getElementById('dedModalTitle').textContent = deduction ? 'แก้ไขรายการหักเงิน' : 'หักเงินพนักงาน';
 
   const empSel = document.getElementById('ded_employee');
-  empSel.innerHTML = state.employees.filter((e) => e.active !== false)
+  empSel.innerHTML = state.employees.filter((e) => e.active !== false || e.id === deduction?.employeeId)
     .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
 
   if (deduction) {

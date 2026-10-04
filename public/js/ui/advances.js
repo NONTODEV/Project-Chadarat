@@ -151,7 +151,7 @@ function openModal(advance) {
   document.getElementById('advModalTitle').textContent = advance ? 'แก้ไขเบิกเงินล่วงหน้า' : 'เบิกเงินล่วงหน้า';
 
   const empSel = document.getElementById('adv_employee');
-  empSel.innerHTML = state.employees.filter((e) => e.active !== false)
+  empSel.innerHTML = state.employees.filter((e) => e.active !== false || e.id === advance?.employeeId)
     .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
 
   if (advance) {

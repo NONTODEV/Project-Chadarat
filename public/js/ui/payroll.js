@@ -6,7 +6,7 @@ import {
   otherDeductionsForEmployeeInHalfMonth, otherDeductionOverrideForMonth, deductionsForEmployeeInHalfMonth,
 } from '../store.js';
 import { payrollCrud, payrollDeductionsCrud, settingsCrud } from '../firestore-service.js';
-import { esc, showToast, showConfirm, THB, fmtDate, halfMonthLabel, guardClick } from '../utils.js';
+import { esc, showToast, showConfirm, THB, fmtDate, halfMonthLabel, guardClick, uid } from '../utils.js';
 
 // Period key format: "YYYY-MM-H1" (1st-15th, paid on the 16th) or
 // "YYYY-MM-H2" (16th-end of month, paid on the 1st of the next month).
@@ -39,13 +39,23 @@ export function renderPayroll() {
   const periods = availableHalfMonths();
   if (!periods.includes(currentPeriod)) currentPeriod = periods[0];
 
-  const activeEmployees = state.employees.filter((e) => e.active !== false);
+  // พนักงานที่ลาออกแล้ว (active===false) ปกติไม่ต้องโผล่ในหน้านี้อีก แต่ถ้ายังมีงวดสุดท้ายที่ยัง
+  // ไม่ได้จ่าย หรือยังมียอดเบิกค้างอยู่ ต้องให้โผล่มาด้วย ไม่งั้นปิดงวดสุดท้ายให้คนที่ลาออกกลางงวด
+  // ไม่ได้เลย (dropdown ที่อื่นกรองคนลาออกออกหมด หน้านี้เป็นที่เดียวที่ต้องยังจัดการเงินให้ได้)
+  const relevantEmployees = state.employees.filter((e) => {
+    if (e.active !== false) return true;
+    const hasCommissionThisPeriod = isTherapist(e) && commissionForEmployeeInHalfMonth(e.id, currentPeriod) > 0;
+    return hasCommissionThisPeriod || outstandingBalanceBeforeMonth(e.id, '9999-99') > 0 || isPayrollPaid(e.id, currentPeriod);
+  });
   let totalNet = 0;
 
-  const rows = activeEmployees.map((emp) => {
+  const rows = relevantEmployees.map((emp) => {
     const therapist = isTherapist(emp);
     const rawCommission = therapist ? commissionForEmployeeInHalfMonth(emp.id, currentPeriod) : 0;
-    const base = therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0);
+    // emp.fixedSalary เป็นเงินเดือน "ต่อเดือน" (ตั้งใจให้กรอกแบบนั้น ดูข้อความในหน้าพนักงาน) แต่
+    // งวดจ่ายเงินตัดทุกครึ่งเดือน จึงต้องหารสองก่อน ไม่งั้นแม่บ้านจะได้เงินเดือนเต็มจำนวนทุกครึ่งเดือน
+    // (เบิ้ลเป็น 2 เท่าของเงินเดือนจริงต่อเดือน)
+    const base = therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0) / 2;
     const guaranteeTopUp = therapist ? base - rawCommission : 0;
     const balanceBefore = outstandingBalanceBeforeMonth(emp.id, currentPeriod);
     const override = deductionOverrideForMonth(emp.id, currentPeriod);
@@ -54,9 +64,13 @@ export function renderPayroll() {
     const otherDeductionDefault = otherDeductionsForEmployeeInHalfMonth(emp.id, currentPeriod);
     const otherDeductionOverride = otherDeductionOverrideForMonth(emp.id, currentPeriod);
     const otherDeduction = otherDeductionOverride != null ? otherDeductionOverride : otherDeductionDefault;
-    const net = base - advance - otherDeduction;
+    const paidRecord = state.payrollPayments.find((p) => p.id === `${currentPeriod}_${emp.id}`);
+    const paid = !!paidRecord;
+    // งวดที่จ่ายไปแล้ว ใช้ยอดที่บันทึก snapshot ไว้ตอนกดจ่ายจริง ไม่ใช่คำนวณสดใหม่ทุกครั้งที่เปิดหน้า
+    // ไม่งั้นถ้ามีคนแก้ไขรายการนวดของงวดนั้นย้อนหลัง หรือเปลี่ยนค่าแรงขั้นต่ำซึ่งมีผลย้อนหลังทุกงวด
+    // ตัวเลข "สุทธิ" ที่โชว์จะเปลี่ยนไปโดยไม่ตรงกับเงินที่จ่ายจริงไปแล้ว
+    const net = paid ? (Number(paidRecord.netPay) || 0) : (base - advance - otherDeduction);
     totalNet += net;
-    const paid = isPayrollPaid(emp.id, currentPeriod);
     return {
       emp, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter,
       otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid,
@@ -66,7 +80,7 @@ export function renderPayroll() {
   // ใช้ sentinel อนาคตไกลๆ แทน currentPeriod ตรงนี้โดยเฉพาะ เพื่อเช็คว่า "ใครยังมีหนี้ค้างจริง
   // อยู่ตอนนี้" แบบไม่ขึ้นกับงวดที่เลือกดูอยู่ — เพราะถ้าเคยกดล้างไปแล้วในงวดนี้ แต่หน้าอื่น (เช่น
   // แดชบอร์ด) เทียบกับเดือนปฏิทินตรงๆ ยังเห็นว่าค้างอยู่ ปุ่มนี้ต้องยังกดซ้ำเพื่อล้างให้สนิทได้
-  const anyOutstanding = activeEmployees.some((emp) => outstandingBalanceBeforeMonth(emp.id, '9999-99') > 0);
+  const anyOutstanding = state.employees.some((emp) => outstandingBalanceBeforeMonth(emp.id, '9999-99') > 0);
 
   el.innerHTML = `
     <div class="widget" style="padding:14px 18px">
@@ -126,8 +140,9 @@ export function renderPayroll() {
 // ใช้ "YYYY-MM" ของเดือนนี้ไม่ได้ เพราะหน้าแดชบอร์ดเทียบแบบ "น้อยกว่าเดือนนี้" (strict <)
 // ถ้าตั้ง sentinel เป็นเดือนนี้พอดี จะไม่นับว่า "น้อยกว่า" ตัวเอง เลยยังโชว์ค้างอยู่เหมือนเดิม
 async function clearAllOutstanding() {
+  // ไม่กรองเฉพาะคนที่ยังทำงานอยู่ — คนที่ลาออกไปแล้วแต่ยังมียอดเบิกค้างในระบบ (เช่นเคลียร์กันนอก
+  // ระบบไปแล้วตอนออกจากงาน) ก็ควรเคลียร์ให้หมดได้เหมือนกัน
   const toClear = state.employees
-    .filter((e) => e.active !== false)
     .map((emp) => ({ emp, balance: outstandingBalanceBeforeMonth(emp.id, '9999-99') }))
     .filter((x) => x.balance > 0);
   if (!toClear.length) { showToast('ไม่มีใครมียอดเบิกค้างแล้ว'); return; }
@@ -138,9 +153,12 @@ async function clearAllOutstanding() {
   );
   if (!ok) return;
 
+  // ใช้ id สุ่มใหม่ทุกครั้งที่กด (ไม่ใช่ doc id ตายตัวต่อพนักงานแบบเดิม) เพราะ totalDeductedExcludingMonth
+  // รวมยอดจาก "ทุก doc" ที่ตรงเงื่อนไขอยู่แล้ว การเขียนทับ doc เดิมด้วยยอดคงเหลือปัจจุบันทำให้ยอดที่
+  // เคยเคลียร์ไปรอบก่อนหายไป (เขียนทับ ไม่ได้บวกสะสม) กดเคลียร์ซ้ำสองครั้งหนี้เก่าจะโผล่กลับมา
   const clearPeriod = '0000-00'; // sorts before every real period/month key, everywhere
   for (const { emp, balance } of toClear) {
-    await payrollDeductionsCrud.save(`${clearPeriod}_${emp.id}`, {
+    await payrollDeductionsCrud.save(uid(), {
       employeeId: emp.id, employeeName: emp.name, month: clearPeriod, amount: balance,
     });
   }
@@ -334,7 +352,9 @@ export function initDeductModal() {
     await payrollCrud.save(`${currentPeriod}_${emp.id}`, {
       employeeId: emp.id, employeeName: emp.name,
       period: currentPeriod, month: currentPeriod.slice(0, 7),
-      netPay: net, paidAt: new Date().toISOString(),
+      // grossCost = เงินสดจริงที่ร้านจ่ายออกทั้งงวด (netPay ที่จ่ายตอนนี้ + เบิกล่วงหน้าที่จ่ายไปก่อน
+      // หน้าแล้วมาหักคืนตรงนี้) ใช้คำนวณต้นทุนแรงงานในใบสรุปรายได้ ไม่ให้ยอดเบิกหายไปจากบัญชี
+      netPay: net, grossCost: base - otherAmount, paidAt: new Date().toISOString(),
     });
     closeDeductModal();
     renderPayroll();
@@ -342,7 +362,24 @@ export function initDeductModal() {
   });
 }
 
+const cancellingIds = new Set();
 async function cancelPaid(emp) {
-  await payrollCrud.remove(`${currentPeriod}_${emp.id}`);
-  showToast('ยกเลิกการจ่ายแล้ว');
+  if (cancellingIds.has(emp.id)) return;
+  cancellingIds.add(emp.id);
+  try {
+    // ต้องลบ payrollDeductions ของงวดนี้ไปด้วย ไม่ใช่ลบแค่ payroll — ไม่งั้นระบบยังนับว่าหักเบิก/
+    // หักเงินอื่นๆ ไปแล้วเท่าที่ตั้งไว้ตอนกดจ่าย ทั้งที่ยกเลิกการจ่ายไปแล้ว ยอดหนี้เบิกของพนักงาน
+    // จะหายไปเท่ากับยอดที่เคยหักโดยไม่มีอะไรจ่ายจริง
+    const ok = await showConfirm(
+      `ยกเลิกการจ่ายเงินเดือนของ "${emp.name}" งวดนี้? ยอดเบิก/หักที่ตั้งไว้สำหรับงวดนี้จะถูกล้างกลับเป็นค่าเริ่มต้นด้วย (ยอดเบิกค้างจะกลับมาเหมือนยังไม่ได้จ่าย)`,
+      true,
+    );
+    if (!ok) return;
+    await payrollCrud.remove(`${currentPeriod}_${emp.id}`);
+    await payrollDeductionsCrud.remove(`${currentPeriod}_${emp.id}`);
+    renderPayroll();
+    showToast('ยกเลิกการจ่ายแล้ว');
+  } finally {
+    cancellingIds.delete(emp.id);
+  }
 }

@@ -151,7 +151,7 @@ function openModal(leave) {
   document.getElementById('lvModalTitle').textContent = leave ? 'แก้ไขการลา' : 'แจ้งลา';
 
   const empSel = document.getElementById('lv_employee');
-  empSel.innerHTML = state.employees.filter((e) => e.active !== false)
+  empSel.innerHTML = state.employees.filter((e) => e.active !== false || e.id === leave?.employeeId)
     .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
 
   if (leave) {

@@ -1,6 +1,6 @@
 import { state, isSuperAdmin, outstandingBalanceBeforeMonth } from '../store.js';
 import { employeesCrud, sessionsCrud, advancesCrud, servicesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, avatarHtml, guardClick } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, avatarHtml, guardClick, todayISO } from '../utils.js';
 import { IMPORTED_EMPLOYEES, IMPORTED_SESSIONS, IMPORTED_ADVANCES } from '../data/seed-history.js';
 import { SEED_SERVICES } from '../data/seed-services.js';
 
@@ -91,7 +91,7 @@ function openModal(emp) {
   document.getElementById('empModalTitle').textContent = emp ? 'แก้ไขพนักงาน' : 'เพิ่มพนักงาน';
   document.getElementById('emp_name').value = emp?.name || '';
   document.getElementById('emp_phone').value = emp?.phone || '';
-  document.getElementById('emp_startDate').value = emp?.startDate || new Date().toISOString().slice(0, 10);
+  document.getElementById('emp_startDate').value = emp?.startDate || todayISO();
   document.getElementById('emp_role').value = emp?.role === 'housekeeper' ? 'housekeeper' : 'therapist';
   document.getElementById('emp_fixedSalary').value = emp?.fixedSalary ?? '';
   document.getElementById('emp_active').checked = emp?.active !== false;

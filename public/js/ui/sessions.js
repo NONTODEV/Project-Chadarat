@@ -276,7 +276,7 @@ function openModal(session) {
   document.getElementById('ses_add_item').style.display = session ? 'none' : 'inline-block';
 
   const empSel = document.getElementById('ses_employee');
-  empSel.innerHTML = state.employees.filter(e => e.active !== false && isTherapist(e))
+  empSel.innerHTML = state.employees.filter(e => (e.active !== false && isTherapist(e)) || e.id === session?.employeeId)
     .map((e) => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
 
   itemCount = 1;
@@ -354,6 +354,18 @@ export function initSessionModal() {
     if (!items.length || items.some((it) => !it.serviceId)) {
       showToast('กรุณาเลือกบริการให้ครบทุกรายการ');
       return;
+    }
+
+    // บริการ/ระยะเวลาที่ยังไม่ได้ตั้งราคาไว้ (prices[d] เป็น undefined) จะได้ customerPrice/
+    // commission เป็น 0 แบบเงียบๆ ถ้าไม่เช็กก่อน — หมอนวดจะไม่ได้ค่าคอมโดยไม่มีอะไรเตือนเลย
+    for (const it of items) {
+      const service = state.services.find((s) => s.id === it.serviceId);
+      const p = service?.prices?.[it.duration] || {};
+      const noCharge = !!it.packageId || it.isOwner;
+      if (p.therapist == null || (!noCharge && p.customer == null)) {
+        showToast(`บริการ "${service?.name || ''}" ยังไม่ได้ตั้งราคาสำหรับ ${it.duration} นาที กรุณาไปตั้งราคาที่หน้า "ราคานวด" ก่อน`);
+        return;
+      }
     }
 
     // แถวหลายรายการในการนวดครั้งเดียวกัน อาจเลือกแพ็กเกจเดียวกันซ้ำกันโดยไม่รู้ตัว (แต่ละแถว
