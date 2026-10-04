@@ -1,8 +1,6 @@
-import { state, isSuperAdmin, outstandingBalanceBeforeMonth } from '../store.js';
-import { employeesCrud, sessionsCrud, advancesCrud, servicesCrud } from '../firestore-service.js';
+import { state, outstandingBalanceBeforeMonth } from '../store.js';
+import { employeesCrud } from '../firestore-service.js';
 import { esc, showConfirm, showToast, uid, fmtDate, avatarHtml, guardClick, todayISO } from '../utils.js';
-import { IMPORTED_EMPLOYEES, IMPORTED_SESSIONS, IMPORTED_ADVANCES } from '../data/seed-history.js';
-import { SEED_SERVICES } from '../data/seed-services.js';
 
 let editingId = null;
 
@@ -23,7 +21,6 @@ export function renderEmployees() {
     </div>
     <div style="margin-top:12px">
       <button class="btn primary" id="emp_add">+ เพิ่มพนักงาน</button>
-      ${isSuperAdmin() ? `<button class="btn small" id="emp_import">นำเข้าราคานวด + พนักงาน + ประวัติจาก Excel</button>` : ''}
     </div>
   `;
 
@@ -33,31 +30,6 @@ export function renderEmployees() {
   });
 
   el.querySelector('#emp_add').addEventListener('click', () => openModal(null));
-  el.querySelector('#emp_import')?.addEventListener('click', importFromExcel);
-}
-
-async function importFromExcel() {
-  const ok = await showConfirm(
-    `นำเข้าราคานวด ${SEED_SERVICES.length} บริการ, พนักงาน ${IMPORTED_EMPLOYEES.length} คน และประวัติการนวด ${IMPORTED_SESSIONS.length} รายการจาก Excel? ` +
-    `กดซ้ำจะทำให้ข้อมูลการนวดซ้ำกัน (ราคา/พนักงานจะแค่เขียนทับ ไม่ซ้ำ)`
-  );
-  if (!ok) return;
-
-  for (const service of SEED_SERVICES) {
-    const { id, ...data } = service;
-    await servicesCrud.save(id, data);
-  }
-  for (const emp of IMPORTED_EMPLOYEES) {
-    const { id, ...data } = emp;
-    await employeesCrud.save(id, data);
-  }
-  for (const session of IMPORTED_SESSIONS) {
-    await sessionsCrud.save(uid(), session);
-  }
-  for (const advance of IMPORTED_ADVANCES) {
-    await advancesCrud.save(uid(), advance);
-  }
-  showToast(`นำเข้าสำเร็จ: ราคานวด ${SEED_SERVICES.length} บริการ, พนักงาน ${IMPORTED_EMPLOYEES.length} คน, ประวัติการนวด ${IMPORTED_SESSIONS.length} รายการ, เบิกล่วงหน้า ${IMPORTED_ADVANCES.length} รายการ`);
 }
 
 function rowHtml(emp) {

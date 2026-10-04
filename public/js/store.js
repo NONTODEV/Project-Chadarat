@@ -26,12 +26,7 @@ export function durations() {
   return [...list].map(Number).sort((a, b) => a - b);
 }
 
-const SUPER_ADMIN_EMAIL = 'admin1@project-chadarat.local';
 export const authState = { email: null };
-
-export function isSuperAdmin() {
-  return authState.email === SUPER_ADMIN_EMAIL;
-}
 
 export function employeeById(id) {
   return state.employees.find((e) => e.id === id);
