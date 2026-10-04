@@ -168,6 +168,14 @@ export function renderDashboard() {
   const housekeeperCost = housekeeperSalaryPerRound * housekeeperRounds;
   const netRevenue = revenue - commission - expenseTotal - housekeeperCost;
 
+  // ค่าคอมของพาร์ทไทม์นับรวมอยู่ใน "commission" (เลยไม่ต้องหักซ้ำใน netRevenue) แต่พาร์ทไทม์
+  // จ่ายเงินสดให้ทุกวันตอนเลิกงานแล้ว (ไม่รอจ่ายงวดแบบพนักงานประจำ) เลยแยกโชว์เป็นยอดของตัวเอง
+  // ไว้ดูว่าจ่ายเงินสดออกไปให้พาร์ทไทม์วันนี้/ช่วงนี้เท่าไรแล้ว
+  const parttimeIds = new Set(state.employees.filter((e) => e.role === 'parttime').map((e) => e.id));
+  const parttimeCommission = periodSessions
+    .filter((s) => parttimeIds.has(s.employeeId))
+    .reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
+
   const recentSessions = [...periodSessions]
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     .slice(0, 10);
@@ -234,6 +242,7 @@ export function renderDashboard() {
       <div class="summary-card"><span>ค่าคอม (${esc(periodLabel)})</span><b>${THB(commission)}</b></div>
       <div class="summary-card"><span>รายจ่ายจิปาถะ (${esc(periodLabel)})</span><b>${THB(expenseTotal)}</b></div>
       ${housekeeperCost > 0 ? `<div class="summary-card"><span>เงินเดือนแม่บ้าน (${esc(periodLabel)})</span><b>${THB(housekeeperCost)}</b></div>` : ''}
+      ${parttimeCommission > 0 ? `<div class="summary-card"><span>ค่าแรงพาร์ทไทม์ จ่ายรายวัน (${esc(periodLabel)})</span><b>${THB(parttimeCommission)}</b></div>` : ''}
       <div class="summary-card"><span>รายได้สุทธิ (${esc(periodLabel)})</span><b style="color:${netRevenue < 0 ? 'var(--bad)' : 'var(--good)'}">${THB(netRevenue)}</b></div>
       <div class="summary-card"><span>ยอดขายแพ็กเกจ (${esc(periodLabel)})</span><b>${THB(packageRevenue)}</b></div>
     </div>

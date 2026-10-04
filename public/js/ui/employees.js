@@ -38,6 +38,8 @@ function rowHtml(emp) {
     : `<span class="pill good">ทำงานอยู่</span>`;
   const rolePill = emp.role === 'housekeeper'
     ? `<span class="pill warn">แม่บ้าน</span>`
+    : emp.role === 'parttime'
+    ? `<span class="pill warn">พาร์ทไทม์</span>`
     : `<span class="pill neutral">พนักงานนวด</span>`;
   return `
     <tr>
@@ -64,7 +66,7 @@ function openModal(emp) {
   document.getElementById('emp_name').value = emp?.name || '';
   document.getElementById('emp_phone').value = emp?.phone || '';
   document.getElementById('emp_startDate').value = emp?.startDate || todayISO();
-  document.getElementById('emp_role').value = emp?.role === 'housekeeper' ? 'housekeeper' : 'therapist';
+  document.getElementById('emp_role').value = emp?.role === 'housekeeper' || emp?.role === 'parttime' ? emp.role : 'therapist';
   document.getElementById('emp_fixedSalary').value = emp?.fixedSalary ?? '';
   document.getElementById('emp_active').checked = emp?.active !== false;
   document.getElementById('emp_delete').style.display = emp ? 'inline-block' : 'none';

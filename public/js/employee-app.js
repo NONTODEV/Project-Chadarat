@@ -96,6 +96,8 @@ function render() {
     : `<span class="pill good">ทำงานอยู่</span>`;
   const rolePill = emp.role === 'housekeeper'
     ? `<span class="pill warn">แม่บ้าน</span>`
+    : emp.role === 'parttime'
+    ? `<span class="pill warn">พาร์ทไทม์</span>`
     : `<span class="pill neutral">พนักงานนวด</span>`;
 
   const groupsHtml = groups.length ? groups.map((g, i) => {

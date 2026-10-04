@@ -42,7 +42,9 @@ export function renderPayroll() {
   // พนักงานที่ลาออกแล้ว (active===false) ปกติไม่ต้องโผล่ในหน้านี้อีก แต่ถ้ายังมีงวดสุดท้ายที่ยัง
   // ไม่ได้จ่าย หรือยังมียอดเบิกค้างอยู่ ต้องให้โผล่มาด้วย ไม่งั้นปิดงวดสุดท้ายให้คนที่ลาออกกลางงวด
   // ไม่ได้เลย (dropdown ที่อื่นกรองคนลาออกออกหมด หน้านี้เป็นที่เดียวที่ต้องยังจัดการเงินให้ได้)
+  // พาร์ทไทม์ไม่เข้ารอบจ่ายครึ่งเดือนนี้เลย เพราะจ่ายเงินสดให้เขาทุกวันตอนเลิกงานไปแล้ว
   const relevantEmployees = state.employees.filter((e) => {
+    if (e.role === 'parttime') return false;
     if (e.active !== false) return true;
     const hasCommissionThisPeriod = isTherapist(e) && commissionForEmployeeInHalfMonth(e.id, currentPeriod) > 0;
     return hasCommissionThisPeriod || outstandingBalanceBeforeMonth(e.id, '9999-99') > 0 || isPayrollPaid(e.id, currentPeriod);
