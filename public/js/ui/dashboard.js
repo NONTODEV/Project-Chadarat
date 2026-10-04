@@ -166,7 +166,10 @@ export function renderDashboard() {
     .reduce((sum, e) => sum + (Number(e.fixedSalary) || 0), 0);
   const housekeeperRounds = periodType === 'half-month' ? 1 : periodType === 'monthly' ? 2 : periodType === 'yearly' ? 24 : 0;
   const housekeeperCost = housekeeperSalaryPerRound * housekeeperRounds;
-  const netRevenue = revenue - commission - expenseTotal - housekeeperCost;
+  // "รายได้ร้าน" ข้างบนตั้งใจโชว์แยกเฉพาะยอดจากการนวด (ไม่รวมแพ็กเกจ เพราะมีการ์ด "ยอดขาย
+  // แพ็กเกจ" แยกให้ดูอยู่แล้ว) แต่ "รายได้สุทธิ" ต้องเป็นกำไรจริงทั้งหมด จึงต้องรวมยอดขาย
+  // แพ็กเกจเข้ามาด้วย ไม่งั้นเดือนที่มีขายแพ็กเกจ ตัวเลขนี้จะไม่ตรงกับใบสรุปรายได้ซึ่งรวมไว้แล้ว
+  const netRevenue = revenue + packageRevenue - commission - expenseTotal - housekeeperCost;
 
   // ค่าคอมของพาร์ทไทม์นับรวมอยู่ใน "commission" (เลยไม่ต้องหักซ้ำใน netRevenue) แต่พาร์ทไทม์
   // จ่ายเงินสดให้ทุกวันตอนเลิกงานแล้ว (ไม่รอจ่ายงวดแบบพนักงานประจำ) เลยแยกโชว์เป็นยอดของตัวเอง

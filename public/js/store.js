@@ -336,16 +336,17 @@ export function expenseTotalForMonth(month) {
   return expensesForMonth(month).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 }
 
-// Cash actually paid out via the Payroll page's "จ่ายแล้ว" toggle for the
-// month — 0 for any employee not yet marked paid, so it reflects money
-// that has really left the business rather than a theoretical estimate.
-// ต้นทุนแรงงานจริงของงวด = netPay (จ่ายสดตอนปิดงวด) + เบิกล่วงหน้าที่หักออกไปจาก netPay ไปแล้ว
-// เพราะเงินเบิกก็เป็นเงินสดที่จ่ายออกจากร้านจริงไปก่อนหน้าแล้ว (แค่จ่ายคนละเวลากับวันปิดงวด)
-// ใช้ grossCost ที่บันทึกไว้ตอนกดจ่าย ถ้าเป็นงวดเก่าก่อนมีฟิลด์นี้ ให้ fallback เป็น netPay ไปก่อน
-export function paidPayrollForMonth(month) {
-  return state.payrollPayments
-    .filter((p) => p.month === month)
-    .reduce((sum, p) => sum + (Number(p.grossCost ?? p.netPay) || 0), 0);
+// ต้นทุนพนักงานแบบ "เกิดขึ้นจริงในเดือนนั้น" (accrual) — ใช้สูตรเดียวกับที่หน้าภาพรวมคิด
+// (ค่าคอมดิบของ session ในเดือนนั้น + เงินเดือนแม่บ้าน) ไม่ใช่แค่ยอดที่กดจ่ายจริงผ่านหน้าเงินเดือน
+// เพราะถ้าใช้ยอดจ่ายจริงอย่างเดียว งวดที่ยังไม่กดจ่ายจะไม่ถูกนับเป็นต้นทุนเลย ทำให้ใบสรุปรายได้
+// กับหน้าภาพรวมแสดงตัวเลขไม่ตรงกัน พนักงานพาร์ทไทม์ไม่มีงวดจ่ายแยกของตัวเอง (จ่ายสดรายวัน) แต่
+// ค่าคอมของเขาก็อยู่ใน session เหมือนพนักงานประจำ จึงถูกรวมมาด้วยโดยอัตโนมัติ
+export function laborCostForMonth(month) {
+  const commission = sessionsForMonth(month).reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
+  const housekeeperCost = state.employees
+    .filter((e) => e.active !== false && e.role === 'housekeeper')
+    .reduce((sum, e) => sum + (Number(e.fixedSalary) || 0), 0) * 2; // เงินเดือนตายตัวต่อรอบ x 2 รอบ/เดือน
+  return commission + housekeeperCost;
 }
 
 export function availableYears() {

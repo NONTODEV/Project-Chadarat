@@ -1,5 +1,5 @@
 import {
-  revenueForMonth, paidPayrollForMonth, expenseTotalForMonth,
+  revenueForMonth, laborCostForMonth, expenseTotalForMonth,
   availableMonths, availableYears,
 } from '../store.js';
 import { THB, esc } from '../utils.js';
@@ -32,7 +32,7 @@ function buildStatement(months) {
   let revenue = 0, payroll = 0, expense = 0;
   const rows = months.map((m) => {
     const rev = revenueForMonth(m);
-    const pay = paidPayrollForMonth(m);
+    const pay = laborCostForMonth(m);
     const exp = expenseTotalForMonth(m);
     revenue += rev; payroll += pay; expense += exp;
     return { month: m, revenue: rev, payroll: pay, expense: exp, net: rev - pay - exp };
