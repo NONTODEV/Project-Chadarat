@@ -176,7 +176,17 @@ export function renderDashboard() {
     .filter((s) => parttimeIds.has(s.employeeId))
     .reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
 
-  const recentSessions = [...periodSessions]
+  // มานวดครั้งเดียวแต่ทำหลายบริการ จะถูกบันทึกเป็นหลาย session แยกกันแต่แชร์ visitId เดียวกัน
+  // (ของเก่าที่ไม่มี visitId ใช้ id ตัวเองแทน = กลุ่มละ 1 รายการ) — กลุ่มรวมกันก่อนตัด 10 รายการ
+  // ล่าสุด ไม่งั้นมานวด 1 ครั้ง 2-3 บริการจะเห็นเป็นหลายแถวแยกกันในตารางนี้
+  const recentVisits = Array.from(
+    periodSessions.reduce((map, s) => {
+      const key = s.visitId || s.id;
+      if (!map.has(key)) map.set(key, { date: s.date, employeeName: s.employeeName, items: [] });
+      map.get(key).items.push(s);
+      return map;
+    }, new Map()).values()
+  )
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     .slice(0, 10);
 
@@ -281,14 +291,19 @@ export function renderDashboard() {
         <table>
           <thead><tr><th>วันที่</th><th>พนักงาน</th><th>บริการ</th><th class="num">ราคา</th></tr></thead>
           <tbody>
-            ${recentSessions.length ? recentSessions.map((s) => {
-              const zeroReason = s.packageId ? 'ใช้แพ็กเกจ' : s.isOwner ? 'เจ้าของร้านนวดเอง' : s.attendanceOnly ? 'ไม่มีลูกค้า' : '';
+            ${recentVisits.length ? recentVisits.map((v) => {
+              const multi = v.items.length > 1;
+              const total = v.items.reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
+              const serviceLabel = v.items.map((s) => `${esc(s.serviceName)} (${s.duration} นาที)`).join(', ');
+              const notes = v.items
+                .map((s) => s.packageId ? 'ใช้แพ็กเกจ' : s.isOwner ? 'เจ้าของร้านนวดเอง' : s.attendanceOnly ? 'ไม่มีลูกค้า' : '')
+                .filter(Boolean);
               return `
               <tr>
-                <td data-label="วันที่">${fmtDate(s.date)}</td>
-                <td data-label="พนักงาน">${esc(s.employeeName)}</td>
-                <td data-label="บริการ">${esc(s.serviceName)} (${s.duration} นาที)</td>
-                <td class="num" data-label="ราคา"><div>${THB(s.customerPrice)}${zeroReason ? `<div class="cell-sub">(${zeroReason})</div>` : ''}</div></td>
+                <td data-label="วันที่">${fmtDate(v.date)}</td>
+                <td data-label="พนักงาน">${esc(v.employeeName)}</td>
+                <td data-label="บริการ"><div>${multi ? `<span class="pill neutral" style="margin-bottom:4px">${v.items.length} รายการ</span><br>` : ''}${serviceLabel}</div></td>
+                <td class="num" data-label="ราคา"><div>${THB(total)}${notes.length ? `<div class="cell-sub">(${notes.join(', ')})</div>` : ''}</div></td>
               </tr>`;
             }).join('') : `<tr><td colspan="4">ไม่มีข้อมูลในช่วงนี้</td></tr>`}
           </tbody>
