@@ -50,6 +50,7 @@ export function renderPayroll() {
     return hasCommissionThisPeriod || outstandingBalanceBeforeMonth(e.id, '9999-99') > 0 || isPayrollPaid(e.id, currentPeriod);
   });
   let totalNet = 0;
+  let totalUnpaid = 0;
 
   const rows = relevantEmployees.map((emp) => {
     const therapist = isTherapist(emp);
@@ -72,6 +73,7 @@ export function renderPayroll() {
     // ตัวเลข "สุทธิ" ที่โชว์จะเปลี่ยนไปโดยไม่ตรงกับเงินที่จ่ายจริงไปแล้ว
     const net = paid ? (Number(paidRecord.netPay) || 0) : (base - advance - otherDeduction);
     totalNet += net;
+    if (!paid) totalUnpaid += net;
     return {
       emp, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter,
       otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid,
@@ -96,8 +98,11 @@ export function renderPayroll() {
       <select class="month-filter" id="pay_month" aria-label="เลือกงวดที่จ่ายเงินเดือน">
         ${periods.map((p) => `<option value="${p}" ${p === currentPeriod ? 'selected' : ''}>${esc(periodDisplay(p))}</option>`).join('')}
       </select>
-      <span style="color:var(--text-dim);font-size:.85rem">สุทธิรวม ${THB(totalNet)}</span>
       ${anyOutstanding ? `<button class="btn small ghost" id="pay_clear_all">ล้างยอดเบิกค้างทั้งหมด</button>` : ''}
+    </div>
+    <div class="summary-cards" style="margin-bottom:12px">
+      <div class="summary-card"><span>ต้องจ่ายทั้งหมดงวดนี้</span><b>${THB(totalNet)}</b></div>
+      <div class="summary-card"><span>ยังไม่ได้จ่าย</span><b style="color:${totalUnpaid > 0 ? 'var(--warn)' : 'var(--good)'}">${THB(totalUnpaid)}</b></div>
     </div>
     <div class="table-wrap">
       <table>
