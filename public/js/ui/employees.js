@@ -129,7 +129,7 @@ export function initEmployeeModal() {
       phone: document.getElementById('emp_phone').value.trim(),
       startDate: document.getElementById('emp_startDate').value,
       role,
-      fixedSalary: role === 'housekeeper' && fixedSalaryRaw !== '' ? Number(fixedSalaryRaw) : null,
+      fixedSalary: role === 'housekeeper' && fixedSalaryRaw !== '' ? Math.max(0, Number(fixedSalaryRaw) || 0) : null,
       active: document.getElementById('emp_active').checked,
     });
     closeModal();

@@ -59,9 +59,23 @@ function renderTab(tab) {
   renderedTabs.add(tab);
 }
 
+// onSnapshot ยิง re-render ทั้งแท็บได้ทุกเมื่อที่มีใคร (เครื่องอื่น/แท็บอื่น) เขียนข้อมูลเข้ามา
+// ไม่ใช่แค่ตอนโหลดครั้งแรก ถ้ากำลังพิมพ์อยู่ในช่องค้นหา (ซึ่งอยู่ใน innerHTML ที่ถูกเขียนทับใหม่
+// หมดทุกครั้ง) จะเสีย focus ไปเฉยๆ ระหว่างพิมพ์ — จำ element/cursor ที่โฟกัสอยู่ไว้ก่อน แล้วค่อย
+// คืน focus ให้ element เดิม (ที่ถูกสร้างขึ้นใหม่) หลัง render เสร็จ
 function renderVisitedTabs() {
   if (renderedTabs.size === 0) { renderTab('dashboard'); return; }
+  const active = document.activeElement;
+  const focusId = active?.tagName === 'INPUT' && active.id ? active.id : null;
+  const cursor = focusId ? active.selectionStart : null;
   renderedTabs.forEach((tab) => RENDERERS[tab]());
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) {
+      el.focus();
+      if (cursor != null && typeof el.setSelectionRange === 'function') el.setSelectionRange(cursor, cursor);
+    }
+  }
 }
 
 function switchTab(tab) {

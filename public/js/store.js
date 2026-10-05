@@ -341,11 +341,22 @@ export function expenseTotalForMonth(month) {
 // เพราะถ้าใช้ยอดจ่ายจริงอย่างเดียว งวดที่ยังไม่กดจ่ายจะไม่ถูกนับเป็นต้นทุนเลย ทำให้ใบสรุปรายได้
 // กับหน้าภาพรวมแสดงตัวเลขไม่ตรงกัน พนักงานพาร์ทไทม์ไม่มีงวดจ่ายแยกของตัวเอง (จ่ายสดรายวัน) แต่
 // ค่าคอมของเขาก็อยู่ใน session เหมือนพนักงานประจำ จึงถูกรวมมาด้วยโดยอัตโนมัติ
+// ค่าคอมของ session คงที่ตลอดกาลอยู่แล้ว (บันทึกค่าไว้ ณ ตอนนวดจริง ไม่เปลี่ยนตามราคาปัจจุบัน) แต่
+// เงินเดือนแม่บ้านไม่มีอะไรแบบนั้นผูกไว้ — ถ้าใช้เงินเดือนปัจจุบันของพนักงานที่ยังทำงานอยู่ตอนนี้มา
+// คิดย้อนหลังทุกเดือน เดือนเก่าๆ จะเพี้ยนทันทีที่แม่บ้านลาออกหรือปรับเงินเดือน (ตัวเลขในใบสรุปที่
+// เคยถูกต้องจะเปลี่ยนไปเองโดยไม่มีใครแก้อะไร) จึงต้องเช็กก่อนว่างวดนั้นๆ ของแม่บ้านคนนั้น "จ่ายจริง
+// แล้วหรือยัง" ถ้าจ่ายแล้วใช้ยอดที่บันทึก snapshot ไว้ตอนจ่าย (แม่นยำ ไม่เปลี่ยนตามปัจจุบัน) ถ้ายัง
+// ไม่จ่าย (เช่นงวดปัจจุบัน) ค่อย fallback มาประมาณจากเงินเดือนตายตัวปัจจุบันไปก่อน
 export function laborCostForMonth(month) {
   const commission = sessionsForMonth(month).reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
-  const housekeeperCost = state.employees
-    .filter((e) => e.active !== false && e.role === 'housekeeper')
-    .reduce((sum, e) => sum + (Number(e.fixedSalary) || 0), 0) * 2; // เงินเดือนตายตัวต่อรอบ x 2 รอบ/เดือน
+  const housekeepers = state.employees.filter((e) => e.role === 'housekeeper');
+  const housekeeperCost = housekeepers.reduce((sum, e) => {
+    return ['H1', 'H2'].reduce((roundSum, half) => {
+      const paidRecord = state.payrollPayments.find((p) => p.id === `${month}-${half}_${e.id}`);
+      const roundCost = paidRecord ? (Number(paidRecord.grossCost ?? paidRecord.netPay) || 0) : (Number(e.fixedSalary) || 0);
+      return roundSum + roundCost;
+    }, sum);
+  }, 0);
   return commission + housekeeperCost;
 }
 
