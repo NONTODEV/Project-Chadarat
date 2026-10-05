@@ -14,18 +14,26 @@ function monthLabel(m) {
   return new Date(y, mm - 1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
 }
 
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// ปีปัจจุบัน/ครึ่งปีปัจจุบันเลือกได้เสมอ (availableYears เติมปีนี้ให้แม้ยังไม่มีข้อมูล) แต่ไม่ควร
+// โชว์แถวของเดือนที่ยังไม่ถึงเลย เพราะจะเห็นเป็นแถว 0 บาทว่างๆ ปนอยู่ในตารางที่ควรมีแต่เดือนที่
+// ผ่านมาแล้วจริง — ตัดเดือนที่ยังไม่ถึงออกก่อนคืนค่า (ปีย้อนหลังไม่กระทบ เพราะทุกเดือนผ่านไปแล้ว)
 function monthsInYearHalf(year, half) {
   const start = half === 'h1' ? 1 : 7;
   const end = half === 'h1' ? 6 : 12;
   const months = [];
   for (let m = start; m <= end; m++) months.push(`${year}-${String(m).padStart(2, '0')}`);
-  return months;
+  return months.filter((m) => m <= currentMonthKey());
 }
 
 function monthsInYear(year) {
   const months = [];
   for (let m = 1; m <= 12; m++) months.push(`${year}-${String(m).padStart(2, '0')}`);
-  return months;
+  return months.filter((m) => m <= currentMonthKey());
 }
 
 function buildStatement(months) {
@@ -41,6 +49,7 @@ function buildStatement(months) {
 }
 
 function periodTitle(months) {
+  if (!months.length) return 'ยังไม่ถึงช่วงเวลานี้';
   if (months.length === 1) return monthLabel(months[0]);
   return `${monthLabel(months[0])} - ${monthLabel(months[months.length - 1])}`;
 }
@@ -60,7 +69,7 @@ export function renderStatement() {
   else targetMonths = [selectedMonth];
 
   const { rows, totals } = buildStatement(targetMonths);
-  const avgNet = totals.net / targetMonths.length;
+  const avgNet = targetMonths.length ? totals.net / targetMonths.length : 0;
   const generatedAt = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
 
   el.innerHTML = `
@@ -112,6 +121,7 @@ export function renderStatement() {
         <table>
           <thead><tr><th>เดือน</th><th class="num">รายได้</th><th class="num">ต้นทุนพนักงาน</th><th class="num">รายจ่ายอื่นๆ</th><th class="num">กำไรสุทธิ</th></tr></thead>
           <tbody>
+            ${!rows.length ? `<tr><td colspan="5">ยังไม่ถึงช่วงเวลานี้</td></tr>` : ''}
             ${rows.map((r) => `
               <tr>
                 <td data-label="เดือน">${esc(monthLabel(r.month))}</td>
