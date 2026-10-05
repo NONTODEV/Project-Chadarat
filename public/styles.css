@@ -193,6 +193,8 @@ tr.clickable:hover td { background: var(--surface-2); }
 
 .month-filter { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-family: inherit; }
 
+.search-input { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-family: inherit; flex: 1 1 160px; min-width: 120px; max-width: 260px; }
+
 .price-input { width: 100px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background-color: var(--bg); color: var(--text); font-family: inherit; text-align: right; }
 
 @keyframes dropDown {

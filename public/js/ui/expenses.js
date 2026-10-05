@@ -1,11 +1,12 @@
 import { state } from '../store.js';
 import { expensesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
 let expandedDays = new Set();
 let editingId = null;
+let searchQuery = '';
 
 export function renderExpenses() {
   const el = document.getElementById('expenses');
@@ -16,7 +17,7 @@ export function renderExpenses() {
     selectedLabel = allGroups[0]?.label || null;
   }
   const current = allGroups.find((g) => g.label === selectedLabel);
-  const rows = current ? current.items : [];
+  const rows = (current ? current.items : []).filter((e) => matchesSearch(searchQuery, e.title, e.note));
   const total = rows.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   const byDay = groupByPeriod(rows, 'daily').sort((a, b) => b.label.localeCompare(a.label));
@@ -32,10 +33,11 @@ export function renderExpenses() {
       <select class="month-filter" id="exp_bucket" aria-label="เลือกช่วงเวลารายจ่าย">
         ${allGroups.map((g) => `<option value="${esc(g.label)}" ${g.label === selectedLabel ? 'selected' : ''}>${esc(g.label)}</option>`).join('')}
       </select>
+      <input type="search" class="search-input" id="exp_search" placeholder="ค้นหารายการ/หมายเหตุ..." value="${esc(searchQuery)}" aria-label="ค้นหารายจ่าย" />
       <span style="color:var(--text-dim);font-size:.85rem">รวม ${rows.length} รายการ · ${THB(total)}</span>
     </div>
 
-    ${byDay.length ? byDay.map(dayGroupHtml).join('') : `<p class="cell-sub">ไม่มีรายจ่ายในช่วงนี้</p>`}
+    ${byDay.length ? byDay.map(dayGroupHtml).join('') : `<p class="cell-sub">${searchQuery ? 'ไม่พบรายการที่ค้นหา' : 'ไม่มีรายจ่ายในช่วงนี้'}</p>`}
 
     <div style="margin-top:12px"><button class="btn primary" id="exp_add">+ เพิ่มรายจ่าย</button></div>
   `;
@@ -50,6 +52,10 @@ export function renderExpenses() {
   document.getElementById('exp_bucket')?.addEventListener('change', (e) => {
     selectedLabel = e.target.value;
     renderExpenses();
+  });
+  document.getElementById('exp_search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rerenderKeepingFocus('exp_search', renderExpenses);
   });
   document.getElementById('exp_add').addEventListener('click', () => openModal());
 

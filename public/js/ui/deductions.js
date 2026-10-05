@@ -1,11 +1,12 @@
 import { state } from '../store.js';
 import { deductionsCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
 let expandedEmployees = new Set();
 let editingId = null;
+let searchQuery = '';
 
 export function renderDeductions() {
   const el = document.getElementById('deductions');
@@ -16,7 +17,8 @@ export function renderDeductions() {
     selectedLabel = allGroups[0]?.label || null;
   }
   const current = allGroups.find((g) => g.label === selectedLabel);
-  const rows = current ? [...current.items].sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [];
+  const rows = (current ? [...current.items].sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [])
+    .filter((d) => matchesSearch(searchQuery, d.employeeName, d.reason));
   const total = rows.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   const byEmployee = groupByEmployee(rows);
@@ -32,10 +34,11 @@ export function renderDeductions() {
       <select class="month-filter" id="ded_bucket" aria-label="เลือกช่วงเวลาหักเงิน">
         ${allGroups.map((g) => `<option value="${esc(g.label)}" ${g.label === selectedLabel ? 'selected' : ''}>${esc(g.label)}</option>`).join('')}
       </select>
+      <input type="search" class="search-input" id="ded_search" placeholder="ค้นหาพนักงาน/เหตุผล..." value="${esc(searchQuery)}" aria-label="ค้นหาหักเงิน" />
       <span style="color:var(--text-dim);font-size:.85rem">รวม ${rows.length} รายการ · หักไปทั้งหมด ${THB(total)}</span>
     </div>
 
-    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">ไม่มีรายการในช่วงนี้</p>`}
+    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">${searchQuery ? 'ไม่พบรายการที่ค้นหา' : 'ไม่มีรายการในช่วงนี้'}</p>`}
 
     <div style="margin-top:12px"><button class="btn primary" id="ded_add">+ หักเงินพนักงาน</button></div>
   `;
@@ -50,6 +53,10 @@ export function renderDeductions() {
   document.getElementById('ded_bucket')?.addEventListener('change', (e) => {
     selectedLabel = e.target.value;
     renderDeductions();
+  });
+  document.getElementById('ded_search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rerenderKeepingFocus('ded_search', renderDeductions);
   });
   document.getElementById('ded_add').addEventListener('click', () => openModal());
 

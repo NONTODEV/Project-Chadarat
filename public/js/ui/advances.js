@@ -1,11 +1,12 @@
 import { state } from '../store.js';
 import { advancesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
 let expandedEmployees = new Set();
 let editingId = null;
+let searchQuery = '';
 
 export function renderAdvances() {
   const el = document.getElementById('advances');
@@ -16,7 +17,8 @@ export function renderAdvances() {
     selectedLabel = allGroups[0]?.label || null;
   }
   const current = allGroups.find((g) => g.label === selectedLabel);
-  const rows = current ? [...current.items].sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [];
+  const rows = (current ? [...current.items].sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [])
+    .filter((a) => matchesSearch(searchQuery, a.employeeName, a.reason));
   const total = rows.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 
   const byEmployee = groupByEmployee(rows);
@@ -32,10 +34,11 @@ export function renderAdvances() {
       <select class="month-filter" id="adv_bucket" aria-label="เลือกช่วงเวลาเบิกเงินล่วงหน้า">
         ${allGroups.map((g) => `<option value="${esc(g.label)}" ${g.label === selectedLabel ? 'selected' : ''}>${esc(g.label)}</option>`).join('')}
       </select>
+      <input type="search" class="search-input" id="adv_search" placeholder="ค้นหาพนักงาน/เหตุผล..." value="${esc(searchQuery)}" aria-label="ค้นหาเบิกล่วงหน้า" />
       <span style="color:var(--text-dim);font-size:.85rem">รวม ${rows.length} รายการ · เบิกไปทั้งหมด ${THB(total)}</span>
     </div>
 
-    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">ไม่มีรายการในช่วงนี้</p>`}
+    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">${searchQuery ? 'ไม่พบรายการที่ค้นหา' : 'ไม่มีรายการในช่วงนี้'}</p>`}
 
     <div style="margin-top:12px"><button class="btn primary" id="adv_add">+ เบิกเงินล่วงหน้า</button></div>
   `;
@@ -50,6 +53,10 @@ export function renderAdvances() {
   document.getElementById('adv_bucket')?.addEventListener('change', (e) => {
     selectedLabel = e.target.value;
     renderAdvances();
+  });
+  document.getElementById('adv_search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rerenderKeepingFocus('adv_search', renderAdvances);
   });
   document.getElementById('adv_add').addEventListener('click', () => openModal());
 

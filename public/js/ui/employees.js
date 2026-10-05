@@ -1,21 +1,27 @@
 import { state, outstandingBalanceBeforeMonth } from '../store.js';
 import { employeesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, avatarHtml, guardClick, todayISO } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, avatarHtml, guardClick, todayISO, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
 let editingId = null;
+let searchQuery = '';
 
 export function renderEmployees() {
   const el = document.getElementById('employees');
   if (!el) return;
 
-  const rows = [...state.employees].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'th'));
+  const rows = [...state.employees]
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'th'))
+    .filter((e) => matchesSearch(searchQuery, e.name, e.phone));
 
   el.innerHTML = `
+    <div class="widget-head" style="margin-bottom:10px">
+      <input type="search" class="search-input" id="emp_search" placeholder="ค้นหาชื่อ/เบอร์โทร..." value="${esc(searchQuery)}" aria-label="ค้นหาพนักงาน" />
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>พนักงาน</th><th>ประเภท</th><th>เบอร์โทร</th><th>เริ่มงาน</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
         <tbody id="emp_body">
-          ${rows.length ? rows.map(rowHtml).join('') : `<tr><td colspan="6">ยังไม่มีพนักงาน</td></tr>`}
+          ${rows.length ? rows.map(rowHtml).join('') : `<tr><td colspan="6">${searchQuery ? 'ไม่พบพนักงานที่ค้นหา' : 'ยังไม่มีพนักงาน'}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -30,6 +36,10 @@ export function renderEmployees() {
   });
 
   el.querySelector('#emp_add').addEventListener('click', () => openModal(null));
+  document.getElementById('emp_search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rerenderKeepingFocus('emp_search', renderEmployees);
+  });
 }
 
 function rowHtml(emp) {

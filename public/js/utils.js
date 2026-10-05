@@ -7,6 +7,27 @@ export function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// ใช้เช็กว่ารายการหนึ่งๆ ตรงกับคำค้นหาไหม โดยเทียบกับหลายฟิลด์พร้อมกัน (ชื่อพนักงาน, เหตุผล,
+// ชื่อลูกค้า ฯลฯ) ไม่สนตัวพิมพ์เล็ก/ใหญ่ — query ว่างถือว่าตรงทุกรายการ
+export function matchesSearch(query, ...fields) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => String(f || '').toLowerCase().includes(q));
+}
+
+// re-render ทั้ง section เขียน innerHTML ใหม่หมดทุกครั้ง ซึ่งสร้าง <input> ค้นหาขึ้นมาใหม่ด้วย —
+// ถ้าไม่ทำแบบนี้ พิมพ์คำค้นหาทีละตัวอักษรจะเสีย focus ไปทุกครั้งที่กดคีย์ (ต้องคลิกกลับเข้าไปใหม่)
+export function rerenderKeepingFocus(inputId, render) {
+  const prev = document.getElementById(inputId);
+  const cursor = prev ? prev.selectionStart : null;
+  render();
+  const next = document.getElementById(inputId);
+  if (next && cursor != null) {
+    next.focus();
+    next.setSelectionRange(cursor, cursor);
+  }
+}
+
 // ป้องกันดับเบิลคลิกปุ่มบันทึก (ซึ่งจะสร้างเอกสารซ้ำเพราะ uid() สุ่มใหม่ทุกครั้ง) โดยปิดปุ่ม
 // ไว้ระหว่างที่ handler แบบ async ยังทำงานไม่จบ แล้วเปิดกลับคืนเมื่อเสร็จ (ไม่ว่าสำเร็จหรือ error)
 export function guardClick(btn, handler) {

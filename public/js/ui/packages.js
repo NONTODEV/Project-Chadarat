@@ -1,16 +1,19 @@
 import { state, durations } from '../store.js';
 import { packagesCrud, packageTemplatesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, guardClick } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
 let expandedPackages = new Set();
 let editingId = null;
 let editingTemplateId = null;
+let searchQuery = '';
 
 export function renderPackages() {
   const el = document.getElementById('packages');
   if (!el) return;
 
-  const rows = [...state.packages].sort((a, b) => (b.purchaseDate || '').localeCompare(a.purchaseDate || ''));
+  const rows = [...state.packages]
+    .sort((a, b) => (b.purchaseDate || '').localeCompare(a.purchaseDate || ''))
+    .filter((p) => matchesSearch(searchQuery, p.customerName, p.customerPhone, p.serviceName));
   const templates = [...state.packageTemplates].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'th'));
 
   el.innerHTML = `
@@ -28,12 +31,20 @@ export function renderPackages() {
       </div>
     </div>
 
-    ${rows.length ? rows.map(packageCardHtml).join('') : `<p class="cell-sub">ยังไม่มีแพ็กเกจ</p>`}
+    <div class="widget-head" style="margin-bottom:10px">
+      <input type="search" class="search-input" id="pkg_search" placeholder="ค้นหาชื่อ/เบอร์โทร/บริการ..." value="${esc(searchQuery)}" aria-label="ค้นหาแพ็กเกจ" />
+    </div>
+
+    ${rows.length ? rows.map(packageCardHtml).join('') : `<p class="cell-sub">${searchQuery ? 'ไม่พบแพ็กเกจที่ค้นหา' : 'ยังไม่มีแพ็กเกจ'}</p>`}
     <div style="margin-top:12px"><button class="btn primary" id="pkg_add">+ เพิ่มแพ็กเกจ</button></div>
   `;
 
   document.getElementById('pkg_add').addEventListener('click', () => openModal());
   document.getElementById('pkgTpl_add').addEventListener('click', () => openTemplateModal());
+  document.getElementById('pkg_search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rerenderKeepingFocus('pkg_search', renderPackages);
+  });
 
   el.querySelectorAll('[data-edit-template]').forEach((btn) => {
     btn.addEventListener('click', () => {

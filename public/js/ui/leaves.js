@@ -1,11 +1,12 @@
 import { state, countLeaveDays } from '../store.js';
 import { leavesCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, todayISO, groupByPeriod, guardClick } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, todayISO, groupByPeriod, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
 let periodType = 'monthly'; // daily | half-month | monthly | yearly
 let selectedLabel = null; // label of the chosen bucket within periodType; null = most recent
 let expandedEmployees = new Set();
 let editingId = null;
+let searchQuery = '';
 
 export function renderLeaves() {
   const el = document.getElementById('leaves');
@@ -16,7 +17,8 @@ export function renderLeaves() {
     selectedLabel = allGroups[0]?.label || null;
   }
   const current = allGroups.find((g) => g.label === selectedLabel);
-  const rows = current ? [...current.items].sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '')) : [];
+  const rows = (current ? [...current.items].sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '')) : [])
+    .filter((l) => matchesSearch(searchQuery, l.employeeName, l.reason));
   const totalDays = rows.reduce((sum, l) => sum + countLeaveDays(l), 0);
 
   const byEmployee = groupByEmployee(rows);
@@ -32,10 +34,11 @@ export function renderLeaves() {
       <select class="month-filter" id="lv_bucket" aria-label="เลือกช่วงเวลาการลา">
         ${allGroups.map((g) => `<option value="${esc(g.label)}" ${g.label === selectedLabel ? 'selected' : ''}>${esc(g.label)}</option>`).join('')}
       </select>
+      <input type="search" class="search-input" id="lv_search" placeholder="ค้นหาพนักงาน/เหตุผล..." value="${esc(searchQuery)}" aria-label="ค้นหาการลา" />
       <span style="color:var(--text-dim);font-size:.85rem">รวม ${rows.length} รายการ · ${totalDays} วัน</span>
     </div>
 
-    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">ไม่มีการลาในช่วงนี้</p>`}
+    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">${searchQuery ? 'ไม่พบรายการที่ค้นหา' : 'ไม่มีการลาในช่วงนี้'}</p>`}
 
     <div style="margin-top:12px"><button class="btn primary" id="lv_add">+ แจ้งลา</button></div>
   `;
@@ -50,6 +53,10 @@ export function renderLeaves() {
   document.getElementById('lv_bucket')?.addEventListener('change', (e) => {
     selectedLabel = e.target.value;
     renderLeaves();
+  });
+  document.getElementById('lv_search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rerenderKeepingFocus('lv_search', renderLeaves);
   });
   document.getElementById('lv_add').addEventListener('click', () => openModal());
 

@@ -1,6 +1,6 @@
 import { state, isTherapist, durations } from '../store.js';
 import { sessionsCrud } from '../firestore-service.js';
-import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupSessionsByPeriod, guardClick } from '../utils.js';
+import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupSessionsByPeriod, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
 // จำนวนครั้งที่เหลือของแพ็กเกจ นับจากรายการนวดที่ผูก packageId นี้ไว้จริง (ไม่ใช่ตัวเลขแยก
 // ที่ต้องคอยอัปเดตเอง) — เลือกแพ็กเกจตอนบันทึกการนวดเมื่อไหร่ก็ถูกนับที่นี่โดยอัตโนมัติ
@@ -16,6 +16,7 @@ let expandedEmployees = new Set();
 let editingId = null;
 let editingVisitId = null; // preserved so editing one item of a multi-item visit keeps it grouped
 let itemCount = 1; // number of service rows currently shown in the "บันทึกการนวด" modal
+let searchQuery = '';
 
 export function renderSessions() {
   const el = document.getElementById('sessions');
@@ -26,7 +27,8 @@ export function renderSessions() {
     selectedLabel = allGroups[0]?.label || null;
   }
   const current = allGroups.find((g) => g.label === selectedLabel);
-  const rows = current ? [...current.sessions].sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [];
+  const rows = (current ? [...current.sessions].sort((a, b) => (b.date || '').localeCompare(a.date || '')) : [])
+    .filter((s) => matchesSearch(searchQuery, s.employeeName, s.serviceName, s.packageCustomerName));
 
   const byEmployee = groupByEmployee(rows);
 
@@ -41,9 +43,10 @@ export function renderSessions() {
       <select class="month-filter" id="ses_bucket" aria-label="เลือกช่วงเวลาการนวด">
         ${allGroups.map((g) => `<option value="${esc(g.label)}" ${g.label === selectedLabel ? 'selected' : ''}>${esc(g.label)}</option>`).join('')}
       </select>
+      <input type="search" class="search-input" id="ses_search" placeholder="ค้นหาพนักงาน/บริการ..." value="${esc(searchQuery)}" aria-label="ค้นหาการนวด" />
     </div>
 
-    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">ไม่มีรายการในช่วงนี้</p>`}
+    ${byEmployee.length ? byEmployee.map(employeeGroupHtml).join('') : `<p class="cell-sub">${searchQuery ? 'ไม่พบรายการที่ค้นหา' : 'ไม่มีรายการในช่วงนี้'}</p>`}
 
     <div style="margin-top:12px"><button class="btn primary" id="ses_add">+ บันทึกการนวด</button></div>
   `;
@@ -58,6 +61,10 @@ export function renderSessions() {
   document.getElementById('ses_bucket')?.addEventListener('change', (e) => {
     selectedLabel = e.target.value;
     renderSessions();
+  });
+  document.getElementById('ses_search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rerenderKeepingFocus('ses_search', renderSessions);
   });
   document.getElementById('ses_add').addEventListener('click', () => openModal());
 
