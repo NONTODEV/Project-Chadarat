@@ -42,9 +42,11 @@ export function renderPayroll() {
   // พนักงานที่ลาออกแล้ว (active===false) ปกติไม่ต้องโผล่ในหน้านี้อีก แต่ถ้ายังมีงวดสุดท้ายที่ยัง
   // ไม่ได้จ่าย หรือยังมียอดเบิกค้างอยู่ ต้องให้โผล่มาด้วย ไม่งั้นปิดงวดสุดท้ายให้คนที่ลาออกกลางงวด
   // ไม่ได้เลย (dropdown ที่อื่นกรองคนลาออกออกหมด หน้านี้เป็นที่เดียวที่ต้องยังจัดการเงินให้ได้)
-  // พาร์ทไทม์ไม่เข้ารอบจ่ายครึ่งเดือนนี้เลย เพราะจ่ายเงินสดให้เขาทุกวันตอนเลิกงานไปแล้ว
+  // พาร์ทไทม์ไม่เข้ารอบจ่ายครึ่งเดือนนี้เลย เพราะจ่ายเงินสดให้เขาทุกวันตอนเลิกงานไปแล้ว แต่ถ้าเคย
+  // เบิกเงินล่วงหน้าไว้ (ยอดเบิกไม่ผูกกับรอบจ่ายรายวัน) ต้องยังโผล่ให้เห็น ไม่งั้นยอดหนี้ค้างของเขา
+  // จะไม่มีที่ไหนในระบบแสดงให้แอดมินเห็นเลย
   const relevantEmployees = state.employees.filter((e) => {
-    if (e.role === 'parttime') return false;
+    if (e.role === 'parttime') return outstandingBalanceBeforeMonth(e.id, '9999-99') > 0;
     if (e.active !== false) return true;
     const hasCommissionThisPeriod = isTherapist(e) && commissionForEmployeeInHalfMonth(e.id, currentPeriod) > 0;
     return hasCommissionThisPeriod || outstandingBalanceBeforeMonth(e.id, '9999-99') > 0 || isPayrollPaid(e.id, currentPeriod);
@@ -53,12 +55,15 @@ export function renderPayroll() {
   let totalUnpaid = 0;
 
   const rows = relevantEmployees.map((emp) => {
+    const parttime = emp.role === 'parttime';
     const therapist = isTherapist(emp);
-    const rawCommission = therapist ? commissionForEmployeeInHalfMonth(emp.id, currentPeriod) : 0;
+    // พาร์ทไทม์ได้ค่าคอมจ่ายเป็นเงินสดรายวันไปแล้ว (นับรวมอยู่ในแดชบอร์ดแยกต่างหาก) ห้ามเอามา
+    // คำนวณเป็น "ฐานเงิน" ซ้ำอีกรอบในงวดนี้ ไม่งั้นจะเหมือนร้านค้างจ่ายค่าคอมที่จ่ายสดไปแล้ว
+    const rawCommission = therapist && !parttime ? commissionForEmployeeInHalfMonth(emp.id, currentPeriod) : 0;
     // emp.fixedSalary คือยอดที่จ่าย "ต่อรอบ" (ต่อครึ่งเดือน) อยู่แล้ว ไม่ใช่ยอดเต็มเดือน — ไม่ต้อง
     // หารสอง (เงินเดือนเต็มเดือน = fixedSalary x 2 รอบ)
-    const base = therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0);
-    const guaranteeTopUp = therapist ? base - rawCommission : 0;
+    const base = parttime ? 0 : therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0);
+    const guaranteeTopUp = therapist && !parttime ? base - rawCommission : 0;
     const balanceBefore = outstandingBalanceBeforeMonth(emp.id, currentPeriod);
     const override = deductionOverrideForMonth(emp.id, currentPeriod);
     const advance = approvedAdvanceForEmployeeInMonth(emp.id, currentPeriod);
@@ -75,7 +80,7 @@ export function renderPayroll() {
     totalNet += net;
     if (!paid) totalUnpaid += net;
     return {
-      emp, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter,
+      emp, parttime, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter,
       otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid,
     };
   });
@@ -176,15 +181,19 @@ function rowHtmlWithDetail(row) {
   return rowHtml(row, expanded) + (expanded ? detailRowHtml(row) : '');
 }
 
-function rowHtml({ emp, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter, otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid }, expanded) {
-  const roleLabel = therapist
+function rowHtml({ emp, parttime, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter, otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid }, expanded) {
+  const roleLabel = parttime
+    ? '<span class="pill warn">พาร์ทไทม์</span>'
+    : therapist
     ? '<span class="pill neutral">พนักงานนวด</span>'
     : '<span class="pill warn">แม่บ้าน</span>';
   // Wrapped in a single <div> each — on mobile the stacked-table CSS makes
   // <td> a flex row, so multiple top-level nodes (text + several .cell-sub
   // divs) would get spread apart by justify-content instead of stacking
   // as one continuous block of text.
-  const baseLabel = therapist
+  const baseLabel = parttime
+    ? `<div>${THB(0)} <span class="cell-sub">(จ่ายค่าคอมเป็นเงินสดรายวันแล้ว)</span></div>`
+    : therapist
     ? `<div>${THB(base)}${guaranteeTopUp > 0 ? `<div class="cell-sub">ค่าคอมจริง ${THB(rawCommission)} + ประกัน ${THB(guaranteeTopUp)}</div>` : ''}</div>`
     : `<div>${THB(base)} <span class="cell-sub">(เงินเดือนตายตัว)</span></div>`;
 
@@ -227,9 +236,11 @@ function rowHtml({ emp, therapist, base, rawCommission, guaranteeTopUp, balanceB
   `;
 }
 
-function detailRowHtml({ emp, therapist }) {
+function detailRowHtml({ emp, parttime, therapist }) {
   let body;
-  if (therapist) {
+  if (parttime) {
+    body = `<p class="cell-sub">พาร์ทไทม์ได้ค่าคอมเป็นเงินสดรายวันแล้ว ไม่ได้จ่ายผ่านงวดนี้ — ที่โผล่ในรายการนี้คือยอดเบิกล่วงหน้าที่ยังค้างอยู่เท่านั้น</p>`;
+  } else if (therapist) {
     const days = dailyBreakdownForEmployeeInHalfMonth(emp.id, currentPeriod);
     const periodSessions = sessionsForHalfMonth(currentPeriod).filter((s) => s.employeeId === emp.id);
 
