@@ -207,7 +207,7 @@ function rowHtml({ emp, parttime, therapist, base, rawCommission, guaranteeTopUp
     advanceCell = `
       <div>
         -${THB(advance)}
-        <div class="cell-sub">${override != null ? `ตั้งเองว่าหัก` : 'หักเต็มจำนวน'} · เป็นหนี้รวม ${THB(balanceBefore)}</div>
+        <div class="cell-sub">${override != null ? `ตั้งเองว่าหัก` : 'หักเต็มจำนวน'} · เบิกล่วงหน้ารวม ${THB(balanceBefore)}</div>
         ${balanceAfter > 0 ? `<div class="cell-sub">เหลือหนี้หลังหักงวดนี้ ${THB(balanceAfter)}</div>` : ''}
       </div>
     `;
