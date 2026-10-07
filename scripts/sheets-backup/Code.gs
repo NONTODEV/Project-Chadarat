@@ -46,6 +46,7 @@ function backupFirestoreToSheet() {
       return [s.id, s.date || '', s.employeeId || '', s.employeeName || '', s.serviceId || '',
         s.serviceName || '', s.duration || '', s.customerPrice || 0, s.commission || 0, !!s.late, !!s.leftEarly];
     }));
+  writeDailySummarySheet(ss, buildDailySummaryRows(sessions));
 
   var advances = fetchCollection('advances');
   advances.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
@@ -201,13 +202,75 @@ function fsValueToJs(value) {
   return null;
 }
 
+// รวมยอดบันทึกการนวดเป็นแถวเดียวต่อวัน สำหรับแท็บ "สรุปรายวัน"
+function buildDailySummaryRows(sessions) {
+  var byDate = {};
+  sessions.forEach(function (s) {
+    var date = s.date || '';
+    if (!date) return;
+    if (!byDate[date]) byDate[date] = { revenue: 0, commission: 0, count: 0 };
+    byDate[date].revenue += Number(s.customerPrice) || 0;
+    byDate[date].commission += Number(s.commission) || 0;
+    byDate[date].count += 1;
+  });
+  var dates = Object.keys(byDate).sort(function (a, b) { return b.localeCompare(a); });
+  return dates.map(function (d) {
+    var m = byDate[d];
+    return [d, m.revenue, m.commission, m.revenue - m.commission, m.count];
+  });
+}
+
+// เขียนแท็บ "สรุปรายวัน" ให้อ่านง่าย: หัวตารางมีสี, เส้นกรอบ, สีแถวสลับ, ปัดหลักพัน
+// และปักให้เป็นแท็บแรกเสมอ (รายละเอียดเต็มยังอยู่ในแท็บ "บันทึกการนวด" ตามปกติ)
+function writeDailySummarySheet(ss, rows) {
+  var sheetName = 'สรุปรายวัน';
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  removeFilterIfAny(sheet);
+  sheet.clearContents();
+  sheet.clearFormats();
+
+  var headers = ['วันที่', 'รายรับ (บาท)', 'ค่าคอม (บาท)', 'กำไร (บาท)', 'จำนวนสลิป'];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+    .setBackground('#4a86e8')
+    .setFontColor('#ffffff')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
+
+  if (rows.length > 0) {
+    var dataRange = sheet.getRange(2, 1, rows.length, headers.length);
+    dataRange.setValues(rows);
+    sheet.getRange(2, 2, rows.length, 3).setNumberFormat('#,##0');
+    dataRange.setBorder(true, true, true, true, true, true, '#cccccc', SpreadsheetApp.BorderStyle.SOLID);
+    for (var i = 0; i < rows.length; i++) {
+      if (i % 2 === 1) sheet.getRange(i + 2, 1, 1, headers.length).setBackground('#f3f6fc');
+    }
+  }
+  sheet.autoResizeColumns(1, headers.length);
+  sheet.setColumnWidth(1, 110);
+  ss.setActiveSheet(sheet);
+  ss.moveActiveSheet(1);
+}
+
 function writeSheet(ss, sheetName, headers, rows) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) sheet = ss.insertSheet(sheetName);
+  removeFilterIfAny(sheet);
   sheet.clearContents();
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.setFrozenRows(1);
   if (rows.length > 0) {
     sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   }
+}
+
+// Sheets API ปฏิเสธการตั้งค่าบางอย่าง (เช่น setNumberFormat) บนคอลัมน์ที่มีตัวกรอง (Filter)
+// ติดอยู่ ถ้ามีใครเผลอกดสร้างตัวกรองไว้บนแท็บที่สคริปต์นี้เขียนทับทุกวัน สคริปต์จะ throw error
+// ทุกรอบตั้งแต่นั้น (trigger รันแล้วล้มเหลวเงียบๆ ไม่มีใครรู้จนกว่าจะสังเกตว่ายอดสำรองค้าง) —
+// ลบตัวกรองออกให้อัตโนมัติก่อนเขียนทุกครั้งกันพลาด ไม่กระทบข้อมูล เพราะแท็บเหล่านี้ถูกเขียนทับ
+// ใหม่ทั้งหมดทุกวันอยู่แล้ว ไม่มีใครตั้งใจพึ่งพาตัวกรองที่ตั้งไว้ข้ามวัน
+function removeFilterIfAny(sheet) {
+  var filter = sheet.getFilter();
+  if (filter) filter.remove();
 }
