@@ -217,7 +217,7 @@ export function initLeaveModal() {
       employeeId, employeeName: employee.name,
       startDate, endDate,
       reason: document.getElementById('lv_reason').value.trim(),
-      status: existing ? existing.status : 'pending',
+      status: existing ? existing.status : 'approved',
     });
     closeModal();
     showToast(editingId ? 'แก้ไขการลาแล้ว' : 'บันทึกการแจ้งลาแล้ว');
