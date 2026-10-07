@@ -154,7 +154,11 @@ export function renderDashboard() {
 
   const activeEmployees = state.employees.filter((e) => e.active !== false).length;
   const revenue = periodSessions.reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
-  const commission = periodSessions.reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
+  // ใช้ guaranteedAmount ต่อคน-ต่อวัน (สูตรเดียวกับตาราง "ค่าคอมแยกตามพนักงาน" ด้านล่าง) แทน
+  // ค่าคอมดิบ เพราะร้านจ่ายเงินประกันขั้นต่ำเพิ่มให้จริงเมื่อค่าคอมวันนั้นไม่ถึง ถ้านับแค่ค่าคอมดิบ
+  // ต้นทุนพนักงาน/รายได้สุทธิจะต่ำกว่าความเป็นจริง
+  const employeeDayRows = dailyEmployeeBreakdown(periodSessions);
+  const commission = employeeDayRows.reduce((sum, r) => sum + guaranteedAmount(r), 0);
   const expenseTotal = periodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const packageRevenue = periodPackages.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
   // แม่บ้านไม่มี session ให้นับค่าคอมจากที่นี่ เงินเดือนตายตัวของแม่บ้าน (fixedSalary ต่อรอบ
@@ -175,9 +179,9 @@ export function renderDashboard() {
   // จ่ายเงินสดให้ทุกวันตอนเลิกงานแล้ว (ไม่รอจ่ายงวดแบบพนักงานประจำ) เลยแยกโชว์เป็นยอดของตัวเอง
   // ไว้ดูว่าจ่ายเงินสดออกไปให้พาร์ทไทม์วันนี้/ช่วงนี้เท่าไรแล้ว
   const parttimeIds = new Set(state.employees.filter((e) => e.role === 'parttime').map((e) => e.id));
-  const parttimeCommission = periodSessions
-    .filter((s) => parttimeIds.has(s.employeeId))
-    .reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
+  const parttimeCommission = employeeDayRows
+    .filter((r) => parttimeIds.has(r.employeeId))
+    .reduce((sum, r) => sum + guaranteedAmount(r), 0);
 
   // มานวดครั้งเดียวแต่ทำหลายบริการ จะถูกบันทึกเป็นหลาย session แยกกันแต่แชร์ visitId เดียวกัน
   // (ของเก่าที่ไม่มี visitId ใช้ id ตัวเองแทน = กลุ่มละ 1 รายการ) — กลุ่มรวมกันก่อนตัด 10 รายการ
@@ -195,7 +199,7 @@ export function renderDashboard() {
 
   // '9999-99' อยู่หลังทุกงวดจริงเสมอ เพื่อให้ได้ยอดเบิกค้าง "ปัจจุบันจริง" ที่ไม่ขึ้นกับว่า
   // ตอนนี้เดือน/ครึ่งเดือนไหน (สอดคล้องกับวิธีคิดในหน้าเงินเดือน)
-  const dailyBreakdown = dailyEmployeeBreakdown(periodSessions).map((row) => ({
+  const dailyBreakdown = employeeDayRows.map((row) => ({
     ...row,
     owed: outstandingBalanceBeforeMonth(row.employeeId, '9999-99'),
   }));

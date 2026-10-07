@@ -126,6 +126,20 @@ export function guaranteedEarningsForEmployeeInMonth(employeeId, month) {
   return guaranteedEarningsForSessions(sessionsForMonth(month).filter((s) => s.employeeId === employeeId));
 }
 
+// เหมือน guaranteedEarningsForSessions แต่รับ sessions ของหลายพนักงานปนกันได้ (จัดกลุ่มตาม
+// employeeId ก่อน แล้วค่อยแบ่งเป็นรายวันในแต่ละคน) ไม่งั้นค่าคอมของคนละคนในวันเดียวกันจะถูกนับ
+// รวมเป็นก้อนเดียว ทำให้เพดานค่าแรงขั้นต่ำต่อวัน-ต่อคนเพี้ยน ใช้ตอนสรุปต้นทุนรวมทั้งร้าน
+export function guaranteedEarningsForMixedSessions(sessions) {
+  const byEmployee = new Map();
+  for (const s of sessions) {
+    if (!byEmployee.has(s.employeeId)) byEmployee.set(s.employeeId, []);
+    byEmployee.get(s.employeeId).push(s);
+  }
+  let total = 0;
+  for (const empSessions of byEmployee.values()) total += guaranteedEarningsForSessions(empSessions);
+  return total;
+}
+
 // Half-month pay periods: key format "YYYY-MM-H1" (1st-15th) or "YYYY-MM-H2"
 // (16th-end of month). Deliberately sorts correctly as a plain string against
 // both other half-month keys and legacy plain "YYYY-MM" month keys (a prefix
@@ -336,11 +350,11 @@ export function expenseTotalForMonth(month) {
   return expensesForMonth(month).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 }
 
-// ต้นทุนพนักงานแบบ "เกิดขึ้นจริงในเดือนนั้น" (accrual) — ใช้สูตรเดียวกับที่หน้าภาพรวมคิด
-// (ค่าคอมดิบของ session ในเดือนนั้น + เงินเดือนแม่บ้าน) ไม่ใช่แค่ยอดที่กดจ่ายจริงผ่านหน้าเงินเดือน
-// เพราะถ้าใช้ยอดจ่ายจริงอย่างเดียว งวดที่ยังไม่กดจ่ายจะไม่ถูกนับเป็นต้นทุนเลย ทำให้ใบสรุปรายได้
-// กับหน้าภาพรวมแสดงตัวเลขไม่ตรงกัน พนักงานพาร์ทไทม์ไม่มีงวดจ่ายแยกของตัวเอง (จ่ายสดรายวัน) แต่
-// ค่าคอมของเขาก็อยู่ใน session เหมือนพนักงานประจำ จึงถูกรวมมาด้วยโดยอัตโนมัติ
+// ต้นทุนพนักงานแบบ "เกิดขึ้นจริงในเดือนนั้น" (accrual) — ใช้สูตรเดียวกับที่หน้าภาพรวมคิด (ค่าคอม
+// ของ session ในเดือนนั้น รวมเงินประกันขั้นต่ำที่ร้านเติมให้จริง + เงินเดือนแม่บ้าน) ไม่ใช่แค่ยอด
+// ที่กดจ่ายจริงผ่านหน้าเงินเดือน เพราะถ้าใช้ยอดจ่ายจริงอย่างเดียว งวดที่ยังไม่กดจ่ายจะไม่ถูกนับเป็น
+// ต้นทุนเลย ทำให้ใบสรุปรายได้กับหน้าภาพรวมแสดงตัวเลขไม่ตรงกัน พนักงานพาร์ทไทม์ไม่มีงวดจ่ายแยกของ
+// ตัวเอง (จ่ายสดรายวัน) แต่ค่าคอมของเขาก็อยู่ใน session เหมือนพนักงานประจำ จึงถูกรวมมาด้วยโดยอัตโนมัติ
 // ค่าคอมของ session คงที่ตลอดกาลอยู่แล้ว (บันทึกค่าไว้ ณ ตอนนวดจริง ไม่เปลี่ยนตามราคาปัจจุบัน) แต่
 // เงินเดือนแม่บ้านไม่มีอะไรแบบนั้นผูกไว้ — ถ้าใช้เงินเดือนปัจจุบันของพนักงานที่ยังทำงานอยู่ตอนนี้มา
 // คิดย้อนหลังทุกเดือน เดือนเก่าๆ จะเพี้ยนทันทีที่แม่บ้านลาออกหรือปรับเงินเดือน (ตัวเลขในใบสรุปที่
@@ -348,7 +362,7 @@ export function expenseTotalForMonth(month) {
 // แล้วหรือยัง" ถ้าจ่ายแล้วใช้ยอดที่บันทึก snapshot ไว้ตอนจ่าย (แม่นยำ ไม่เปลี่ยนตามปัจจุบัน) ถ้ายัง
 // ไม่จ่าย (เช่นงวดปัจจุบัน) ค่อย fallback มาประมาณจากเงินเดือนตายตัวปัจจุบันไปก่อน
 export function laborCostForMonth(month) {
-  const commission = sessionsForMonth(month).reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
+  const commission = guaranteedEarningsForMixedSessions(sessionsForMonth(month));
   const housekeepers = state.employees.filter((e) => e.role === 'housekeeper');
   const housekeeperCost = housekeepers.reduce((sum, e) => {
     return ['H1', 'H2'].reduce((roundSum, half) => {

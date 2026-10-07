@@ -72,7 +72,15 @@ function render() {
   const leaves = leavesForEmployee(employeeId);
   const totalAdvance = approvedAdvanceTotalForEmployee(employeeId);
   const totalEarned = therapist ? guaranteedEarningsTotalForEmployee(employeeId) : 0;
-  const remaining = totalEarned - totalAdvance;
+  // เงินเดือนที่จ่ายผ่านหน้าเงินเดือนไปแล้ว (netPay ของทุกงวดที่กดจ่ายแล้ว) ก็เป็นเงินที่พนักงาน
+  // ได้รับไปแล้วเหมือนกับเบิกล่วงหน้า ต้องหักออกด้วย ไม่งั้น "คงเหลือ" จะนับรายได้ที่จ่ายไปแล้ว
+  // ซ้ำว่ายังค้างจ่ายอยู่ และพองขึ้นเรื่อยๆ ไม่มีที่สิ้นสุดตามอายุงาน
+  const totalPaidViaPayroll = therapist
+    ? state.payrollPayments
+      .filter((p) => p.employeeId === employeeId)
+      .reduce((sum, p) => sum + (Number(p.netPay) || 0), 0)
+    : 0;
+  const remaining = totalEarned - totalAdvance - totalPaidViaPayroll;
 
   // ช่วงเวลาสำหรับการ์ดสรุปยอดด้านบนเท่านั้น (แยกจาก grouping ของ "ประวัติการนวด" ด้านล่าง)
   // sumPeriodType === 'all' คือโหมดดูยอดรวมทั้งหมด ไม่ต้องเลือกช่วงย่อย
