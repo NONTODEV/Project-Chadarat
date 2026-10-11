@@ -154,6 +154,7 @@ export function renderDashboard() {
 
   const activeEmployees = state.employees.filter((e) => e.active !== false).length;
   const revenue = periodSessions.reduce((sum, s) => sum + (Number(s.customerPrice) || 0) - (Number(s.discount) || 0), 0);
+  const discountTotal = periodSessions.reduce((sum, s) => sum + (Number(s.discount) || 0), 0);
   // ใช้ guaranteedAmount ต่อคน-ต่อวัน (สูตรเดียวกับตาราง "ค่าคอมแยกตามพนักงาน" ด้านล่าง) แทน
   // ค่าคอมดิบ เพราะร้านจ่ายเงินประกันขั้นต่ำเพิ่มให้จริงเมื่อค่าคอมวันนั้นไม่ถึง ถ้านับแค่ค่าคอมดิบ
   // ต้นทุนพนักงาน/รายได้สุทธิจะต่ำกว่าความเป็นจริง
@@ -256,6 +257,7 @@ export function renderDashboard() {
       <div class="summary-card"><span>พนักงานที่ทำงานอยู่</span><b>${activeEmployees} คน</b></div>
       <div class="summary-card"><span>ยอดนวด (${esc(periodLabel)})</span><b>${periodSessions.length} ครั้ง</b></div>
       <div class="summary-card"><span>รายได้ร้าน (${esc(periodLabel)})</span><b>${THB(revenue)}</b></div>
+      ${discountTotal > 0 ? `<div class="summary-card"><span>ส่วนลดที่ให้ไป (${esc(periodLabel)})</span><b style="color:var(--warn)">${THB(discountTotal)}</b></div>` : ''}
       <div class="summary-card"><span>ค่าคอม (${esc(periodLabel)})</span><b>${THB(commission)}</b></div>
       <div class="summary-card"><span>รายจ่ายจิปาถะ (${esc(periodLabel)})</span><b>${THB(expenseTotal)}</b></div>
       ${housekeeperCost > 0 ? `<div class="summary-card"><span>เงินเดือนแม่บ้าน (${esc(periodLabel)})</span><b>${THB(housekeeperCost)}</b></div>` : ''}
