@@ -40,7 +40,7 @@ function dailyEmployeeBreakdown(sessions) {
     const key = `${s.date}|${s.employeeId}`;
     if (!map.has(key)) map.set(key, { date: s.date, employeeId: s.employeeId, employeeName: s.employeeName, revenue: 0, commission: 0, hasIssue: false });
     const row = map.get(key);
-    row.revenue += Number(s.customerPrice) || 0;
+    row.revenue += (Number(s.customerPrice) || 0) - (Number(s.discount) || 0);
     row.commission += Number(s.commission) || 0;
     if (s.late || s.leftEarly) row.hasIssue = true;
   }
@@ -153,7 +153,7 @@ export function renderDashboard() {
   }
 
   const activeEmployees = state.employees.filter((e) => e.active !== false).length;
-  const revenue = periodSessions.reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
+  const revenue = periodSessions.reduce((sum, s) => sum + (Number(s.customerPrice) || 0) - (Number(s.discount) || 0), 0);
   // ใช้ guaranteedAmount ต่อคน-ต่อวัน (สูตรเดียวกับตาราง "ค่าคอมแยกตามพนักงาน" ด้านล่าง) แทน
   // ค่าคอมดิบ เพราะร้านจ่ายเงินประกันขั้นต่ำเพิ่มให้จริงเมื่อค่าคอมวันนั้นไม่ถึง ถ้านับแค่ค่าคอมดิบ
   // ต้นทุนพนักงาน/รายได้สุทธิจะต่ำกว่าความเป็นจริง
@@ -300,11 +300,13 @@ export function renderDashboard() {
           <tbody>
             ${recentVisits.length ? recentVisits.map((v) => {
               const multi = v.items.length > 1;
-              const total = v.items.reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
+              const total = v.items.reduce((sum, s) => sum + (Number(s.customerPrice) || 0) - (Number(s.discount) || 0), 0);
+              const discountTotal = v.items.reduce((sum, s) => sum + (Number(s.discount) || 0), 0);
               const serviceLabel = v.items.map((s) => `${esc(s.serviceName)} (${s.duration} นาที)`).join(', ');
               const notes = v.items
                 .map((s) => s.packageId ? 'ใช้แพ็กเกจ' : s.isOwner ? 'เจ้าของร้านนวดเอง' : s.attendanceOnly ? 'ไม่มีลูกค้า' : '')
                 .filter(Boolean);
+              if (discountTotal > 0) notes.push(`ส่วนลด ${THB(discountTotal)}`);
               return `
               <tr>
                 <td data-label="วันที่">${fmtDate(v.date)}</td>

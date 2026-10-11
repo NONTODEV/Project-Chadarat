@@ -94,7 +94,7 @@ export function groupSessionsByPeriod(sessions, grouping) {
     if (!groups.has(key)) groups.set(key, { label, sessions: [], revenue: 0, commission: 0 });
     const g = groups.get(key);
     g.sessions.push(s);
-    g.revenue += Number(s.customerPrice) || 0;
+    g.revenue += (Number(s.customerPrice) || 0) - (Number(s.discount) || 0);
     g.commission += Number(s.commission) || 0;
   }
   return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0])).map(([, g]) => g);

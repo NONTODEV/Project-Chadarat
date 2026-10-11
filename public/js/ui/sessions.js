@@ -145,7 +145,8 @@ function visitRowHtml(visit) {
             if (s.attendanceOnly) return `<div><span class="pill good">มาทำงาน ไม่มีลูกค้า (ได้ค่าประกัน)</span> ${flags}</div>`;
             const pkgPill = s.packageId ? `<span class="pill warn">แพ็กเกจ: ${esc(s.packageCustomerName || '')}</span>` : '';
             const ownerPill = s.isOwner ? `<span class="pill neutral">เจ้าของร้านนวดเอง</span>` : '';
-            return `<div>${esc(s.serviceName)} (${s.duration} นาที) ${pkgPill}${ownerPill} ${flags}</div>`;
+            const discountPill = Number(s.discount) > 0 ? `<span class="pill warn">ส่วนลด ${THB(s.discount)}</span>` : '';
+            return `<div>${esc(s.serviceName)} (${s.duration} นาที) ${pkgPill}${ownerPill}${discountPill} ${flags}</div>`;
           }).join('')}
         </div>
       </td>
@@ -191,6 +192,11 @@ function itemRowHtml(i) {
           <span>เจ้าของร้านนวดเอง (ไม่คิดเงิน แต่หมอยังได้ค่าคอมตามปกติ)</span>
         </label>
       </div>
+      <div class="ses_item_discount_wrap field" style="margin-top:8px;margin-bottom:0">
+        <label style="margin:0">ส่วนลด (บาท)</label>
+        <input type="number" class="ses_item_discount" min="0" step="0.01" placeholder="0" aria-label="ส่วนลด รายการที่ ${i + 1}" />
+        <div class="cell-sub" style="margin-top:4px">หมอยังได้ค่าคอมเต็มตามปกติ ส่วนลดจะหักออกจากรายได้ร้านเท่านั้น</div>
+      </div>
       <p class="ses_item_preview cell-sub" style="margin:6px 0 0"></p>
     </div>
   `;
@@ -203,6 +209,7 @@ function readItemsFromDom() {
     duration: Number(container.querySelector(`[data-row="${i}"] .ses_item_duration`).value),
     packageId: container.querySelector(`[data-row="${i}"] .ses_item_package`)?.value || null,
     isOwner: !!container.querySelector(`[data-row="${i}"] .ses_item_owner`)?.checked,
+    discount: Number(container.querySelector(`[data-row="${i}"] .ses_item_discount`)?.value) || 0,
   }));
 }
 
@@ -212,13 +219,30 @@ function updateItemPreview(i) {
   const durSel = container.querySelector(`[data-row="${i}"] .ses_item_duration`);
   const pkgSel = container.querySelector(`[data-row="${i}"] .ses_item_package`);
   const ownerChk = container.querySelector(`[data-row="${i}"] .ses_item_owner`);
+  const discountInput = container.querySelector(`[data-row="${i}"] .ses_item_discount`);
   const svc = state.services.find((s) => s.id === svcSel.value);
   const p = svc?.prices?.[durSel.value] || {};
   const noCharge = !!pkgSel?.value || ownerChk?.checked;
   const reason = pkgSel?.value ? 'ใช้แพ็กเกจ' : 'เจ้าของร้านนวดเอง';
-  container.querySelector(`[data-row="${i}"] .ses_item_preview`).textContent = noCharge
-    ? `ราคาลูกค้า: 0.00 ฿ (${reason})  ·  ค่าคอม: ${p.therapist != null ? THB(p.therapist) : '-'}`
-    : `ราคาลูกค้า: ${p.customer != null ? THB(p.customer) : '-'}  ·  ค่าคอม: ${p.therapist != null ? THB(p.therapist) : '-'}`;
+
+  // ไม่คิดเงินอยู่แล้ว (แพ็กเกจ/เจ้าของร้านนวดเอง) ใส่ส่วนลดไปก็ไม่มีผล ซ่อนช่องไว้กันสับสน
+  const discountWrap = container.querySelector(`[data-row="${i}"] .ses_item_discount_wrap`);
+  if (discountWrap) discountWrap.style.display = noCharge ? 'none' : '';
+
+  if (noCharge) {
+    container.querySelector(`[data-row="${i}"] .ses_item_preview`).textContent =
+      `ราคาลูกค้า: 0.00 ฿ (${reason})  ·  ค่าคอม: ${p.therapist != null ? THB(p.therapist) : '-'}`;
+    return;
+  }
+
+  const customerPrice = p.customer != null ? Number(p.customer) : null;
+  const discount = Math.max(0, Math.min(Number(discountInput?.value) || 0, customerPrice ?? 0));
+  const netPrice = customerPrice != null ? customerPrice - discount : null;
+  const priceText = customerPrice != null
+    ? (discount > 0 ? `${THB(netPrice)} (ราคาเต็ม ${THB(customerPrice)} หักส่วนลด ${THB(discount)})` : THB(customerPrice))
+    : '-';
+  container.querySelector(`[data-row="${i}"] .ses_item_preview`).textContent =
+    `ราคาลูกค้า: ${priceText}  ·  ค่าคอม: ${p.therapist != null ? THB(p.therapist) : '-'}`;
 }
 
 // แสดงแพ็กเกจที่ยังเหลือ "ทุกใบ" ไม่กรองตามบริการ/ระยะเวลาที่เลือกไว้อยู่ตอนนี้ — เพราะ
@@ -250,6 +274,8 @@ function renderItemRows(initial) {
     }
     const ownerChk = container.querySelector(`[data-row="${i}"] .ses_item_owner`);
     ownerChk.checked = !!initial?.[i]?.isOwner;
+    const discountInput = container.querySelector(`[data-row="${i}"] .ses_item_discount`);
+    discountInput.value = initial?.[i]?.discount || '';
     populatePackageOptions(i, initial?.[i]?.packageId);
     const pkgSel = container.querySelector(`[data-row="${i}"] .ses_item_package`);
     svcSel.addEventListener('change', () => updateItemPreview(i));
@@ -262,6 +288,7 @@ function renderItemRows(initial) {
       updateItemPreview(i);
     });
     ownerChk.addEventListener('change', () => updateItemPreview(i));
+    discountInput.addEventListener('input', () => updateItemPreview(i));
     updateItemPreview(i);
   }
 
@@ -294,7 +321,7 @@ function openModal(session) {
     document.getElementById('ses_late').checked = !!session.late;
     document.getElementById('ses_leftEarly').checked = !!session.leftEarly;
     noCustomer.checked = !!session.attendanceOnly;
-    renderItemRows([{ serviceId: session.serviceId, duration: session.duration, packageId: session.packageId || null, isOwner: !!session.isOwner }]);
+    renderItemRows([{ serviceId: session.serviceId, duration: session.duration, packageId: session.packageId || null, isOwner: !!session.isOwner, discount: Number(session.discount) || 0 }]);
   } else {
     document.getElementById('ses_date').value = todayISO();
     document.getElementById('ses_late').checked = false;
@@ -347,7 +374,7 @@ export function initSessionModal() {
         employeeId, employeeName: employee.name,
         serviceId: null, serviceName: 'ไม่มีลูกค้า (ได้ค่าประกันขั้นต่ำ)',
         duration: 0, date,
-        customerPrice: 0, commission: 0,
+        customerPrice: 0, commission: 0, discount: 0,
         late, leftEarly, attendanceOnly: true,
         ...(editingId && editingVisitId ? { visitId: editingVisitId } : {}),
       };
@@ -398,11 +425,14 @@ export function initSessionModal() {
       const service = state.services.find((s) => s.id === it.serviceId);
       const p = service.prices?.[it.duration] || {};
       const pkg = it.packageId ? state.packages.find((pk) => pk.id === it.packageId) : null;
+      const noCharge = !!pkg || it.isOwner;
+      // แพ็กเกจ/เจ้าของร้านนวดเองไม่มีราคาลูกค้าให้หักส่วนลดอยู่แล้ว ส่วนลดจริงต้องไม่เกินราคาเต็ม
+      const discount = noCharge ? 0 : Math.max(0, Math.min(Number(it.discount) || 0, p.customer ?? 0));
       await sessionsCrud.save(editingId, {
         employeeId, employeeName: employee.name,
         serviceId: it.serviceId, serviceName: service.name,
         duration: Number(it.duration), date,
-        customerPrice: (pkg || it.isOwner) ? 0 : (p.customer ?? 0), commission: p.therapist ?? 0,
+        customerPrice: noCharge ? 0 : (p.customer ?? 0), commission: p.therapist ?? 0, discount,
         late, leftEarly,
         packageId: pkg ? pkg.id : null, packageCustomerName: pkg ? pkg.customerName : null,
         isOwner: !!it.isOwner,
@@ -418,11 +448,13 @@ export function initSessionModal() {
       const service = state.services.find((s) => s.id === it.serviceId);
       const p = service.prices?.[it.duration] || {};
       const pkg = it.packageId ? state.packages.find((pk) => pk.id === it.packageId) : null;
+      const noCharge = !!pkg || it.isOwner;
+      const discount = noCharge ? 0 : Math.max(0, Math.min(Number(it.discount) || 0, p.customer ?? 0));
       await sessionsCrud.save(uid(), {
         employeeId, employeeName: employee.name,
         serviceId: it.serviceId, serviceName: service.name,
         duration: Number(it.duration), date,
-        customerPrice: (pkg || it.isOwner) ? 0 : (p.customer ?? 0), commission: p.therapist ?? 0,
+        customerPrice: noCharge ? 0 : (p.customer ?? 0), commission: p.therapist ?? 0, discount,
         late, leftEarly,
         packageId: pkg ? pkg.id : null, packageCustomerName: pkg ? pkg.customerName : null,
         isOwner: !!it.isOwner,

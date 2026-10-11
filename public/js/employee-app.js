@@ -36,7 +36,7 @@ function guaranteePillForDay(daySessions, commission, therapist) {
 
 function sessionPillsHtml(sessions) {
   return `<div style="display:flex;flex-wrap:wrap;gap:6px">
-    ${sessions.map((s) => `<span class="pill neutral">${esc(s.serviceName)} (${s.duration} น.) · ${THB(s.customerPrice)}${s.late ? ' · มาสาย' : ''}${s.leftEarly ? ' · ออกก่อน' : ''}</span>`).join('')}
+    ${sessions.map((s) => `<span class="pill neutral">${esc(s.serviceName)} (${s.duration} น.) · ${THB((Number(s.customerPrice) || 0) - (Number(s.discount) || 0))}${Number(s.discount) > 0 ? ` (ส่วนลด ${THB(s.discount)})` : ''}${s.late ? ' · มาสาย' : ''}${s.leftEarly ? ' · ออกก่อน' : ''}</span>`).join('')}
   </div>`;
 }
 
@@ -90,7 +90,7 @@ function render() {
     sumSelectedLabel = sumGroups[0]?.label || null;
   }
   const currentSumGroup = isAllTime ? null : sumGroups.find((g) => g.label === sumSelectedLabel);
-  const totalRevenue = sessions.reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
+  const totalRevenue = sessions.reduce((sum, s) => sum + (Number(s.customerPrice) || 0) - (Number(s.discount) || 0), 0);
   const totalCommission = sessions.reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
   const periodSessions = isAllTime ? sessions : (currentSumGroup ? currentSumGroup.sessions : []);
   const periodRevenue = isAllTime ? totalRevenue : (currentSumGroup ? currentSumGroup.revenue : 0);

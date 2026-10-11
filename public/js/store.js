@@ -341,7 +341,7 @@ export function availableMonths() {
 }
 
 export function revenueForMonth(month) {
-  const sessionRevenue = sessionsForMonth(month).reduce((sum, s) => sum + (Number(s.customerPrice) || 0), 0);
+  const sessionRevenue = sessionsForMonth(month).reduce((sum, s) => sum + (Number(s.customerPrice) || 0) - (Number(s.discount) || 0), 0);
   const packageRevenue = packagesForMonth(month).reduce((sum, p) => sum + (Number(p.price) || 0), 0);
   return sessionRevenue + packageRevenue;
 }
