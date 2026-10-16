@@ -1,4 +1,4 @@
-import { state } from '../store.js';
+import { state, isDeductionApplied } from '../store.js';
 import { deductionsCrud } from '../firestore-service.js';
 import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
@@ -99,7 +99,7 @@ function employeeGroupHtml(g) {
       ${open ? `
         <div class="drop-anim table-wrap flat" style="margin-bottom:12px">
           <table>
-            <thead><tr><th>วันที่</th><th class="num">จำนวนเงิน</th><th>เหตุผล</th><th>จัดการ</th></tr></thead>
+            <thead><tr><th>วันที่</th><th class="num">จำนวนเงิน</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
             <tbody>
               ${g.items.map(rowHtml).join('')}
             </tbody>
@@ -111,11 +111,13 @@ function employeeGroupHtml(g) {
 }
 
 function rowHtml(d) {
+  const applied = isDeductionApplied(d);
   return `
     <tr>
       <td data-label="วันที่">${fmtDate(d.date)}</td>
       <td class="num" data-label="จำนวนเงิน">${THB(d.amount)}</td>
       <td data-label="เหตุผล">${esc(d.reason || '-')}</td>
+      <td data-label="สถานะ">${applied ? '<span class="pill good">หักแล้ว</span>' : '<span class="pill warn">ยังไม่ได้หัก</span>'}</td>
       <td data-label="จัดการ">
         <button class="btn small" data-edit="${d.id}">แก้ไข</button>
         <button class="btn small danger" data-delete="${d.id}">ลบ</button>

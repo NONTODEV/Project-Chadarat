@@ -301,6 +301,23 @@ export function isPayrollPaid(employeeId, month) {
   return state.payrollPayments.some((p) => p.id === `${month}_${employeeId}`);
 }
 
+// งวดครึ่งเดือนที่ "วันที่" นี้ตกอยู่ ใช้หาว่ารายการหักเงิน (ที่ผูกกับวันที่ ไม่ใช่งวด) ควร
+// นับเป็นของงวดจ่ายเงินเดือนงวดไหน — ตรงกับตรรกะเดียวกับ isDateInHalfMonthPeriod
+function halfMonthPeriodForDate(dateStr) {
+  if (!dateStr) return null;
+  const month = dateStr.slice(0, 7);
+  const day = Number(dateStr.slice(8, 10));
+  return `${month}-${day <= 15 ? 'H1' : 'H2'}`;
+}
+
+// รายการหักเงินนี้ถูกรวมจ่ายไปแล้วหรือยัง — เช็คว่างวดจ่ายเงินเดือนของพนักงานคนนี้ที่ครอบ
+// วันที่ของรายการนี้ถูกกดจ่ายแล้ว (มี payroll doc) หรือไม่ ไม่มี flag แยกเก็บไว้ตรงๆ
+// เพราะรายการหักเงินถูกผูกกับงวดด้วยวันที่เท่านั้น (ดู deductionsForEmployeeInHalfMonth)
+export function isDeductionApplied(deduction) {
+  const period = halfMonthPeriodForDate(deduction.date);
+  return period ? isPayrollPaid(deduction.employeeId, period) : false;
+}
+
 export function leavesForEmployee(employeeId) {
   return state.leaves
     .filter((l) => l.employeeId === employeeId)
