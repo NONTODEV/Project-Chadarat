@@ -1,5 +1,5 @@
 import { initCloudSync } from './firestore-service.js';
-import { state, isTherapist, advancesForEmployee, approvedAdvanceTotalForEmployee, leavesForEmployee, countLeaveDays, guaranteedEarningsTotalForEmployee, guaranteedEarningsForSessions, minDailyWage } from './store.js';
+import { state, isTherapist, advancesForEmployee, approvedAdvanceTotalForEmployee, advanceDeductedAmounts, leavesForEmployee, countLeaveDays, guaranteedEarningsTotalForEmployee, guaranteedEarningsForSessions, minDailyWage } from './store.js';
 import { esc, fmtDate, avatarHtml, THB, groupSessionsByPeriod } from './utils.js';
 
 const params = new URLSearchParams(window.location.search);
@@ -11,10 +11,16 @@ let showAllLeaves = false;
 let sumPeriodType = 'monthly'; // daily | half-month | monthly | yearly — scopes the summary cards only
 let sumSelectedLabel = null;
 
-function advanceRowHtml(a) {
-  const statusPill = a.status === 'approved' ? '<span class="pill good">อนุมัติแล้ว</span>'
-    : a.status === 'rejected' ? '<span class="pill bad">ปฏิเสธ</span>'
-    : '<span class="pill warn">รออนุมัติ</span>';
+function advanceStatusPill(a, deductedAmount) {
+  if (a.status === 'rejected') return '<span class="pill bad">ปฏิเสธ</span>';
+  const amount = Number(a.amount) || 0;
+  if (deductedAmount >= amount) return '<span class="pill good">หักแล้ว</span>';
+  if (deductedAmount > 0) return `<span class="pill warn">หักแล้ว ${THB(deductedAmount)} จาก ${THB(amount)}</span>`;
+  return '<span class="pill neutral">ยังไม่หัก</span>';
+}
+
+function advanceRowHtml(a, deductedAmount) {
+  const statusPill = advanceStatusPill(a, deductedAmount);
   return `
     <tr>
       <td data-label="วันที่">${fmtDate(a.date)}</td>
@@ -69,6 +75,7 @@ function render() {
 
   const therapist = isTherapist(emp);
   const advances = advancesForEmployee(employeeId);
+  const deductedAmounts = advanceDeductedAmounts(employeeId);
   const leaves = leavesForEmployee(employeeId);
   const totalAdvance = approvedAdvanceTotalForEmployee(employeeId);
   const totalEarned = therapist ? guaranteedEarningsTotalForEmployee(employeeId) : 0;
@@ -175,11 +182,11 @@ function render() {
       <div class="summary-card"><span>รายได้รวม (${esc(periodLabel)})</span><b>${THB(periodRevenue)}</b></div>
       ${therapist ? `
         <div class="summary-card"><span>ได้เงินรวม (${esc(periodLabel)})</span><b>${THB(periodEarned)}</b>${periodGuaranteeTopUp > 0 ? `<span class="cell-sub">ค่าคอมจริง ${THB(periodCommission)} + ประกัน ${THB(periodGuaranteeTopUp)}</span>` : ''}</div>
-        <div class="summary-card"><span>เบิกล่วงหน้ารวม (อนุมัติแล้ว ทั้งหมด)</span><b style="color:var(--warn)">-${THB(totalAdvance)}</b></div>
+        <div class="summary-card"><span>เบิกล่วงหน้ารวมทั้งหมด</span><b style="color:var(--warn)">-${THB(totalAdvance)}</b></div>
         <div class="summary-card"><span>คงเหลือ (ทั้งหมด)</span><b style="color:${remaining < 0 ? 'var(--bad)' : 'var(--good)'}">${THB(remaining)}</b></div>
       ` : `
         <div class="summary-card"><span>เงินเดือนตายตัว</span><b>${emp.fixedSalary != null ? THB(emp.fixedSalary) + ' /รอบ' : 'ยังไม่ตั้ง'}</b></div>
-        <div class="summary-card"><span>เบิกล่วงหน้ารวม (อนุมัติแล้ว ทั้งหมด)</span><b style="color:var(--warn)">-${THB(totalAdvance)}</b></div>
+        <div class="summary-card"><span>เบิกล่วงหน้ารวมทั้งหมด</span><b style="color:var(--warn)">-${THB(totalAdvance)}</b></div>
       `}
     </div>
 
@@ -190,7 +197,7 @@ function render() {
       <table>
         <thead><tr><th>วันที่</th><th class="num">จำนวนเงิน</th><th>สถานะ</th><th>เหตุผล</th></tr></thead>
         <tbody>
-          ${advances.length ? (showAllAdvances ? advances : advances.slice(0, 5)).map(advanceRowHtml).join('') : `<tr><td colspan="4">ยังไม่มีประวัติเบิกเงินล่วงหน้า</td></tr>`}
+          ${advances.length ? (showAllAdvances ? advances : advances.slice(0, 5)).map((a) => advanceRowHtml(a, deductedAmounts.get(a.id) || 0)).join('') : `<tr><td colspan="4">ยังไม่มีประวัติเบิกเงินล่วงหน้า</td></tr>`}
         </tbody>
       </table>
     </div>

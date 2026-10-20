@@ -297,6 +297,31 @@ export function approvedAdvanceTotalForEmployee(employeeId) {
     .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
 }
 
+function totalDeductedEverForEmployee(employeeId) {
+  return state.payrollDeductions
+    .filter((d) => d.employeeId === employeeId)
+    .reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+}
+
+// การหักเบิกล่วงหน้าจริงเป็นยอดรวมต่อพนักงาน (ดูยอดหนี้รวม ไม่ผูกกับรายการเบิกรายตัวว่าหักอันไหน
+// ก่อน) ฟังก์ชันนี้จำลองลำดับ "เบิกอันเก่าสุดถูกหักก่อน" (FIFO) ขึ้นมาเอง เพื่อบอกได้ว่าเบิกแต่ละ
+// รายการถูกหักไปแล้วเท่าไร สำหรับแสดงผลในหน้าประวัติเบิกเท่านั้น ไม่ใช่ตัวเลขที่ระบบใช้คำนวณยอด
+// หนี้จริง (ยอดหนี้จริงคำนวณจากยอดรวม ไม่สนใจว่าหักจากรายการไหน)
+export function advanceDeductedAmounts(employeeId) {
+  const advances = state.advances
+    .filter((a) => a.employeeId === employeeId && a.status === 'approved')
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  let remaining = totalDeductedEverForEmployee(employeeId);
+  const map = new Map();
+  for (const a of advances) {
+    const amount = Number(a.amount) || 0;
+    const deducted = Math.max(0, Math.min(remaining, amount));
+    map.set(a.id, deducted);
+    remaining -= deducted;
+  }
+  return map;
+}
+
 export function isPayrollPaid(employeeId, month) {
   return state.payrollPayments.some((p) => p.id === `${month}_${employeeId}`);
 }

@@ -70,8 +70,6 @@ export function renderLeaves() {
   });
 
   rows.forEach((l) => {
-    el.querySelector(`[data-approve="${l.id}"]`)?.addEventListener('click', () => setStatus(l, 'approved'));
-    el.querySelector(`[data-reject="${l.id}"]`)?.addEventListener('click', () => setStatus(l, 'rejected'));
     el.querySelector(`[data-edit="${l.id}"]`)?.addEventListener('click', () => openModal(l));
     el.querySelector(`[data-delete="${l.id}"]`)?.addEventListener('click', () => removeLeave(l));
   });
@@ -120,12 +118,7 @@ function statusPill(status) {
 
 function rowHtml(l) {
   const dateRange = l.startDate === l.endDate ? fmtDate(l.startDate) : `${fmtDate(l.startDate)} - ${fmtDate(l.endDate)}`;
-  const statusActions = l.status === 'pending'
-    ? `<button class="btn small" data-approve="${l.id}">อนุมัติ</button>
-       <button class="btn small danger" data-reject="${l.id}">ปฏิเสธ</button>`
-    : '';
   const actions = `
-    ${statusActions}
     <button class="btn small" data-edit="${l.id}">แก้ไข</button>
     <button class="btn small danger" data-delete="${l.id}">ลบ</button>
   `;
@@ -138,12 +131,6 @@ function rowHtml(l) {
       <td data-label="จัดการ">${actions}</td>
     </tr>
   `;
-}
-
-async function setStatus(l, status) {
-  const { id, ...rest } = l;
-  await leavesCrud.save(id, { ...rest, status });
-  showToast(status === 'approved' ? 'อนุมัติการลาแล้ว' : 'ปฏิเสธการลาแล้ว');
 }
 
 async function removeLeave(l) {

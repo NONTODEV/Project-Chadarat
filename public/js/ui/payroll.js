@@ -2,7 +2,7 @@ import {
   state, availableHalfMonths, commissionForEmployeeInHalfMonth, guaranteedEarningsForEmployeeInHalfMonth,
   approvedAdvanceForEmployeeInMonth, deductionOverrideForMonth, outstandingBalanceBeforeMonth,
   outstandingBalanceAfterMonth, isPayrollPaid, isTherapist,
-  dailyBreakdownForEmployeeInHalfMonth, sessionsForHalfMonth, advancesForEmployee, minDailyWage,
+  dailyBreakdownForEmployeeInHalfMonth, sessionsForHalfMonth, advancesForEmployee, advanceDeductedAmounts, minDailyWage,
   otherDeductionsForEmployeeInHalfMonth, otherDeductionOverrideForMonth, deductionsForEmployeeInHalfMonth,
 } from '../store.js';
 import { payrollCrud, payrollDeductionsCrud, settingsCrud } from '../firestore-service.js';
@@ -236,6 +236,13 @@ function rowHtml({ emp, parttime, therapist, base, rawCommission, guaranteeTopUp
   `;
 }
 
+function advancePillHtml(a, deductedAmount) {
+  const amount = Number(a.amount) || 0;
+  const deducted = deductedAmount >= amount ? 'หักแล้ว' : deductedAmount > 0 ? `หักแล้ว ${THB(deductedAmount)}` : 'ยังไม่หัก';
+  const pillClass = deductedAmount >= amount ? 'good' : deductedAmount > 0 ? 'warn' : 'neutral';
+  return `<span class="pill ${pillClass}">${fmtDate(a.date)} · ${THB(amount)}${a.reason ? ' · ' + esc(a.reason) : ''} · ${deducted}</span>`;
+}
+
 function detailRowHtml({ emp, parttime, therapist }) {
   let body;
   if (parttime) {
@@ -269,11 +276,12 @@ function detailRowHtml({ emp, parttime, therapist }) {
   }
 
   const approvedAdvances = advancesForEmployee(emp.id).filter((a) => a.status === 'approved');
+  const deductedAmounts = advanceDeductedAmounts(emp.id);
   const advancesHtml = approvedAdvances.length ? `
     <div style="margin-top:12px">
-      <b style="font-size:.85rem">ประวัติการเบิกที่อนุมัติแล้วทั้งหมด</b>
+      <b style="font-size:.85rem">ประวัติการเบิกทั้งหมด</b>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
-        ${approvedAdvances.map((a) => `<span class="pill warn">${fmtDate(a.date)} · ${THB(a.amount)}${a.reason ? ' · ' + esc(a.reason) : ''}</span>`).join('')}
+        ${approvedAdvances.map((a) => advancePillHtml(a, deductedAmounts.get(a.id) || 0)).join('')}
       </div>
     </div>
   ` : '';
@@ -305,13 +313,14 @@ function openPayModal(row) {
   deductingRow = row;
   const { emp, base, balanceBefore, advance, otherDeduction } = row;
   const approvedAdvances = advancesForEmployee(emp.id).filter((a) => a.status === 'approved');
+  const deductedAmounts = advanceDeductedAmounts(emp.id);
   const periodDeductions = deductionsForEmployeeInHalfMonth(emp.id, currentPeriod);
 
   document.getElementById('deductModalTitle').textContent = `จ่ายเงินเดือน: ${emp.name}`;
   document.getElementById('deduct_earned').textContent = THB(base);
   document.getElementById('deduct_owed').textContent = THB(balanceBefore);
   document.getElementById('deduct_history').innerHTML = approvedAdvances.length
-    ? approvedAdvances.map((a) => `<span class="pill warn">${fmtDate(a.date)} · ${THB(a.amount)}${a.reason ? ' · ' + esc(a.reason) : ''}</span>`).join('')
+    ? approvedAdvances.map((a) => advancePillHtml(a, deductedAmounts.get(a.id) || 0)).join('')
     : `<span class="cell-sub">ยังไม่มีประวัติการเบิก</span>`;
   document.getElementById('deduct_amount').value = advance;
 

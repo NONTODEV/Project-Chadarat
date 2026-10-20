@@ -1,4 +1,4 @@
-import { state } from '../store.js';
+import { state, advanceDeductedAmounts } from '../store.js';
 import { advancesCrud } from '../firestore-service.js';
 import { esc, showConfirm, showToast, uid, fmtDate, THB, todayISO, groupByPeriod, guardClick, matchesSearch, rerenderKeepingFocus } from '../utils.js';
 
@@ -70,8 +70,6 @@ export function renderAdvances() {
   });
 
   rows.forEach((a) => {
-    el.querySelector(`[data-approve="${a.id}"]`)?.addEventListener('click', () => setStatus(a, 'approved'));
-    el.querySelector(`[data-reject="${a.id}"]`)?.addEventListener('click', () => setStatus(a, 'rejected'));
     el.querySelector(`[data-edit="${a.id}"]`)?.addEventListener('click', () => openModal(a));
     el.querySelector(`[data-delete="${a.id}"]`)?.addEventListener('click', () => removeAdvance(a));
   });
@@ -92,6 +90,7 @@ function groupByEmployee(advances) {
 
 function employeeGroupHtml(g) {
   const open = expandedEmployees.has(g.employeeId);
+  const deducted = advanceDeductedAmounts(g.employeeId);
   return `
     <div class="widget" style="padding-bottom:${open ? '8px' : '0'}">
       <button class="widget-head" data-toggle-employee="${g.employeeId}" style="width:100%;border:none;background:none;cursor:pointer;text-align:left;padding:14px 0">
@@ -103,7 +102,7 @@ function employeeGroupHtml(g) {
           <table>
             <thead><tr><th>วันที่</th><th class="num">จำนวนเงิน</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
             <tbody>
-              ${g.items.map(rowHtml).join('')}
+              ${g.items.map((a) => rowHtml(a, deducted.get(a.id) || 0)).join('')}
             </tbody>
           </table>
         </div>
@@ -112,33 +111,26 @@ function employeeGroupHtml(g) {
   `;
 }
 
-function statusPill(status) {
-  if (status === 'approved') return `<span class="pill good">อนุมัติแล้ว</span>`;
-  if (status === 'rejected') return `<span class="pill bad">ปฏิเสธ</span>`;
-  return `<span class="pill warn">รออนุมัติ</span>`;
+function statusPill(a, deductedAmount) {
+  if (a.status === 'rejected') return `<span class="pill bad">ปฏิเสธ</span>`;
+  const amount = Number(a.amount) || 0;
+  if (deductedAmount >= amount) return `<span class="pill good">หักแล้ว</span>`;
+  if (deductedAmount > 0) return `<span class="pill warn">หักแล้ว ${THB(deductedAmount)} จาก ${THB(amount)}</span>`;
+  return `<span class="pill neutral">ยังไม่หัก</span>`;
 }
 
-function rowHtml(a) {
-  const actions = a.status === 'pending'
-    ? `<button class="btn small" data-approve="${a.id}">อนุมัติ</button>
-       <button class="btn small danger" data-reject="${a.id}">ปฏิเสธ</button>
-       <button class="btn small" data-edit="${a.id}">แก้ไข</button>`
-    : `<button class="btn small" data-edit="${a.id}">แก้ไข</button>
+function rowHtml(a, deductedAmount) {
+  const actions = `<button class="btn small" data-edit="${a.id}">แก้ไข</button>
        <button class="btn small danger" data-delete="${a.id}">ลบ</button>`;
   return `
     <tr>
       <td data-label="วันที่">${fmtDate(a.date)}</td>
       <td class="num" data-label="จำนวนเงิน">${THB(a.amount)}</td>
       <td data-label="เหตุผล">${esc(a.reason || '-')}</td>
-      <td data-label="สถานะ">${statusPill(a.status)}</td>
+      <td data-label="สถานะ">${statusPill(a, deductedAmount)}</td>
       <td data-label="จัดการ">${actions}</td>
     </tr>
   `;
-}
-
-async function setStatus(a, status) {
-  await advancesCrud.save(a.id, { ...stripId(a), status });
-  showToast(status === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธรายการแล้ว');
 }
 
 async function removeAdvance(a) {
@@ -146,11 +138,6 @@ async function removeAdvance(a) {
   if (!ok) return;
   await advancesCrud.remove(a.id);
   showToast('ลบแล้ว');
-}
-
-function stripId(a) {
-  const { id, ...rest } = a;
-  return rest;
 }
 
 function openModal(advance) {
