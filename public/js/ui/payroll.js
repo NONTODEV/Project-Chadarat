@@ -4,8 +4,9 @@ import {
   outstandingBalanceAfterMonth, isPayrollPaid, isTherapist,
   dailyBreakdownForEmployeeInHalfMonth, sessionsForHalfMonth, advancesForEmployee, advanceDeductedAmounts, minDailyWage,
   otherDeductionsForEmployeeInHalfMonth, otherDeductionOverrideForMonth, deductionsForEmployeeInHalfMonth,
+  isParttime, parttimeDailyPayFor, parttimeDailyPaidTotalInHalfMonth, parttimeDailyPaysForEmployeeInHalfMonth,
 } from '../store.js';
-import { payrollCrud, payrollDeductionsCrud, settingsCrud } from '../firestore-service.js';
+import { payrollCrud, payrollDeductionsCrud, settingsCrud, parttimeDailyPaysCrud } from '../firestore-service.js';
 import { esc, showToast, showConfirm, THB, fmtDate, halfMonthLabel, guardClick, uid } from '../utils.js';
 
 // Period key format: "YYYY-MM-H1" (1st-15th, paid on the 16th) or
@@ -42,28 +43,38 @@ export function renderPayroll() {
   // พนักงานที่ลาออกแล้ว (active===false) ปกติไม่ต้องโผล่ในหน้านี้อีก แต่ถ้ายังมีงวดสุดท้ายที่ยัง
   // ไม่ได้จ่าย หรือยังมียอดเบิกค้างอยู่ ต้องให้โผล่มาด้วย ไม่งั้นปิดงวดสุดท้ายให้คนที่ลาออกกลางงวด
   // ไม่ได้เลย (dropdown ที่อื่นกรองคนลาออกออกหมด หน้านี้เป็นที่เดียวที่ต้องยังจัดการเงินให้ได้)
-  // พาร์ทไทม์ไม่เข้ารอบจ่ายครึ่งเดือนนี้เลย เพราะจ่ายเงินสดให้เขาทุกวันตอนเลิกงานไปแล้ว แต่ถ้าเคย
-  // เบิกเงินล่วงหน้าไว้ (ยอดเบิกไม่ผูกกับรอบจ่ายรายวัน) ต้องยังโผล่ให้เห็น ไม่งั้นยอดหนี้ค้างของเขา
-  // จะไม่มีที่ไหนในระบบแสดงให้แอดมินเห็นเลย
+  // พาร์ทไทม์เข้ารอบจ่ายครึ่งเดือนเหมือนพนักงานประจำแล้ว — บางวันจ่ายสดตอนเลิกงาน (กด "จ่ายสดแล้ว"
+  // รายวันในแถวรายละเอียด) บางวันไม่รับ ปล่อยสะสมไว้ ยอดที่ยังไม่ได้รับทั้งงวดจะมาจ่ายรวมตรงนี้
+  // แสดงเฉพาะพาร์ทไทม์ที่มีงานในงวดนี้ / จ่ายงวดนี้แล้ว / ยังมียอดเบิกค้าง — ไม่งั้นพาร์ทไทม์ที่ไม่ได้
+  // มาเลยทั้งงวดจะโผล่เป็นแถว 0 บาทรกตาราง
+  const periodSessionsAll = sessionsForHalfMonth(currentPeriod);
   const relevantEmployees = state.employees.filter((e) => {
-    if (e.role === 'parttime') return outstandingBalanceBeforeMonth(e.id, '9999-99') > 0;
+    if (isParttime(e)) {
+      return periodSessionsAll.some((s) => s.employeeId === e.id)
+        || parttimeDailyPaidTotalInHalfMonth(e.id, currentPeriod) > 0
+        || isPayrollPaid(e.id, currentPeriod)
+        || outstandingBalanceBeforeMonth(e.id, '9999-99') > 0;
+    }
     if (e.active !== false) return true;
     const hasCommissionThisPeriod = isTherapist(e) && commissionForEmployeeInHalfMonth(e.id, currentPeriod) > 0;
     return hasCommissionThisPeriod || outstandingBalanceBeforeMonth(e.id, '9999-99') > 0 || isPayrollPaid(e.id, currentPeriod);
   });
-  let totalNet = 0;
-  let totalUnpaid = 0;
+  const totals = {
+    regular: { earned: 0, cashPaid: 0, net: 0, unpaid: 0, count: 0 },
+    parttime: { earned: 0, cashPaid: 0, net: 0, unpaid: 0, count: 0 },
+  };
 
   const rows = relevantEmployees.map((emp) => {
-    const parttime = emp.role === 'parttime';
+    const parttime = isParttime(emp);
     const therapist = isTherapist(emp);
-    // พาร์ทไทม์ได้ค่าคอมจ่ายเป็นเงินสดรายวันไปแล้ว (นับรวมอยู่ในแดชบอร์ดแยกต่างหาก) ห้ามเอามา
-    // คำนวณเป็น "ฐานเงิน" ซ้ำอีกรอบในงวดนี้ ไม่งั้นจะเหมือนร้านค้างจ่ายค่าคอมที่จ่ายสดไปแล้ว
-    const rawCommission = therapist && !parttime ? commissionForEmployeeInHalfMonth(emp.id, currentPeriod) : 0;
+    // พาร์ทไทม์คิดเหมือนพนักงานนวดทุกอย่าง (ค่าคอม + ประกันขั้นต่ำรายวัน) ต่างกันแค่บางวันจ่ายสด
+    // ไปแล้ว ซึ่งถูกหักออกเป็น cashPaid ด้านล่าง ไม่ให้จ่ายซ้ำตอนสิ้นงวด
+    const rawCommission = therapist ? commissionForEmployeeInHalfMonth(emp.id, currentPeriod) : 0;
     // emp.fixedSalary คือยอดที่จ่าย "ต่อรอบ" (ต่อครึ่งเดือน) อยู่แล้ว ไม่ใช่ยอดเต็มเดือน — ไม่ต้อง
     // หารสอง (เงินเดือนเต็มเดือน = fixedSalary x 2 รอบ)
-    const base = parttime ? 0 : therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0);
-    const guaranteeTopUp = therapist && !parttime ? base - rawCommission : 0;
+    const base = therapist ? guaranteedEarningsForEmployeeInHalfMonth(emp.id, currentPeriod) : (Number(emp.fixedSalary) || 0);
+    const guaranteeTopUp = therapist ? base - rawCommission : 0;
+    const cashPaid = parttime ? parttimeDailyPaidTotalInHalfMonth(emp.id, currentPeriod) : 0;
     const balanceBefore = outstandingBalanceBeforeMonth(emp.id, currentPeriod);
     const override = deductionOverrideForMonth(emp.id, currentPeriod);
     const advance = approvedAdvanceForEmployeeInMonth(emp.id, currentPeriod);
@@ -76,14 +87,23 @@ export function renderPayroll() {
     // งวดที่จ่ายไปแล้ว ใช้ยอดที่บันทึก snapshot ไว้ตอนกดจ่ายจริง ไม่ใช่คำนวณสดใหม่ทุกครั้งที่เปิดหน้า
     // ไม่งั้นถ้ามีคนแก้ไขรายการนวดของงวดนั้นย้อนหลัง หรือเปลี่ยนค่าแรงขั้นต่ำซึ่งมีผลย้อนหลังทุกงวด
     // ตัวเลข "สุทธิ" ที่โชว์จะเปลี่ยนไปโดยไม่ตรงกับเงินที่จ่ายจริงไปแล้ว
-    const net = paid ? (Number(paidRecord.netPay) || 0) : (base - advance - otherDeduction);
-    totalNet += net;
-    if (!paid) totalUnpaid += net;
+    // พาร์ทไทม์: งวดที่กดจ่ายไปแล้วใช้ยอดจ่ายรายวันที่ snapshot ไว้ตอนปิดงวด เหมือนกับ netPay
+    const shownCashPaid = paid && paidRecord.cashPaidDaily != null ? Number(paidRecord.cashPaidDaily) || 0 : cashPaid;
+    const net = paid ? (Number(paidRecord.netPay) || 0) : (base - cashPaid - advance - otherDeduction);
+    const bucket = parttime ? totals.parttime : totals.regular;
+    bucket.count += 1;
+    bucket.earned += base;
+    bucket.cashPaid += shownCashPaid;
+    bucket.net += net;
+    if (!paid) bucket.unpaid += net;
     return {
-      emp, parttime, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter,
+      emp, parttime, therapist, base, rawCommission, guaranteeTopUp, cashPaid: shownCashPaid, balanceBefore, override, advance, balanceAfter,
       otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid,
     };
   });
+
+  const totalNet = totals.regular.net + totals.parttime.net;
+  const totalUnpaid = totals.regular.unpaid + totals.parttime.unpaid;
 
   // ใช้ sentinel อนาคตไกลๆ แทน currentPeriod ตรงนี้โดยเฉพาะ เพื่อเช็คว่า "ใครยังมีหนี้ค้างจริง
   // อยู่ตอนนี้" แบบไม่ขึ้นกับงวดที่เลือกดูอยู่ — เพราะถ้าเคยกดล้างไปแล้วในงวดนี้ แต่หน้าอื่น (เช่น
@@ -108,15 +128,13 @@ export function renderPayroll() {
     <div class="summary-cards" style="margin-bottom:12px">
       <div class="summary-card"><span>ต้องจ่ายทั้งหมดงวดนี้</span><b>${THB(totalNet)}</b></div>
       <div class="summary-card"><span>ยังไม่ได้จ่าย</span><b style="color:${totalUnpaid > 0 ? 'var(--warn)' : 'var(--good)'}">${THB(totalUnpaid)}</b></div>
+      <div class="summary-card"><span>พนักงานประจำ ต้องจ่าย (${totals.regular.count} คน)</span><b>${THB(totals.regular.net)}</b></div>
+      <div class="summary-card"><span>พาร์ทไทม์ ได้ทั้งงวด (${totals.parttime.count} คน)</span><b>${THB(totals.parttime.earned)}</b></div>
+      <div class="summary-card"><span>พาร์ทไทม์ จ่ายสดรายวันแล้ว</span><b style="color:var(--good)">${THB(totals.parttime.cashPaid)}</b></div>
+      <div class="summary-card"><span>พาร์ทไทม์ ต้องจ่ายสิ้นงวด</span><b>${THB(totals.parttime.net)}</b></div>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>พนักงาน</th><th>ประเภท</th><th class="num">ฐานเงิน</th><th class="num">เบิกล่วงหน้า</th><th class="num">หักอื่นๆ</th><th class="num">สุทธิ</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
-        <tbody>
-          ${rows.length ? rows.map(rowHtmlWithDetail).join('') : `<tr><td colspan="8">ยังไม่มีพนักงานที่ทำงานอยู่</td></tr>`}
-        </tbody>
-      </table>
-    </div>
+    ${tableHtml('พนักงานประจำ', rows.filter((r) => !r.parttime), 'ยังไม่มีพนักงานประจำในงวดนี้')}
+    ${tableHtml('พาร์ทไทม์', rows.filter((r) => r.parttime), 'ไม่มีพาร์ทไทม์ที่มาทำงานในงวดนี้')}
   `;
 
   document.getElementById('pay_month').addEventListener('change', (e) => {
@@ -142,6 +160,54 @@ export function renderPayroll() {
     });
     el.querySelector(`[data-open-pay="${emp.id}"]`)?.addEventListener('click', () => openPayModal(row));
   });
+
+  el.querySelectorAll('[data-day-pay]').forEach((btn) => {
+    guardClick(btn, () => toggleDailyPay(btn.dataset.dayPay, btn.dataset.date, Number(btn.dataset.amount) || 0));
+  });
+}
+
+// กด "จ่ายสดแล้ว" ของพาร์ทไทม์รายวัน — บันทึกยอดที่จ่ายจริงวันนั้น (ค่าคอม + ประกัน ณ ตอนกด) กดซ้ำ
+// เพื่อยกเลิก (กรณีกดผิด หรือวันนั้นเปลี่ยนใจไม่รับ ให้ไปสะสมรวมจ่ายสิ้นงวดแทน)
+async function toggleDailyPay(employeeId, date, amount) {
+  const emp = state.employees.find((e) => e.id === employeeId);
+  if (!emp) return;
+  if (isPayrollPaid(employeeId, currentPeriod)) {
+    showToast('งวดนี้กดจ่ายไปแล้ว ต้องยกเลิกการจ่ายงวดก่อนถึงจะแก้รายวันได้');
+    return;
+  }
+  const id = `${date}_${employeeId}`;
+  const existing = parttimeDailyPayFor(employeeId, date);
+  if (existing) {
+    const ok = await showConfirm(`ยกเลิก "จ่ายสดแล้ว" ของ ${emp.name} วันที่ ${fmtDate(date)} (${THB(Number(existing.amount) || 0)})? ยอดนี้จะกลับไปรวมจ่ายตอนสิ้นงวด`, true);
+    if (!ok) return;
+    await parttimeDailyPaysCrud.remove(id);
+    showToast('ยกเลิกแล้ว ยอดวันนี้จะไปรวมจ่ายสิ้นงวด');
+  } else {
+    await parttimeDailyPaysCrud.save(id, {
+      employeeId, employeeName: emp.name, date, amount, paidAt: new Date().toISOString(),
+    });
+    showToast(`บันทึกจ่ายสด ${THB(amount)} ให้ ${emp.name} แล้ว`);
+  }
+}
+
+function tableHtml(title, rows, emptyText) {
+  const parttime = title === 'พาร์ทไทม์';
+  const cols = parttime ? 9 : 8;
+  return `
+    <div class="widget-head" style="margin:14px 0 8px"><h2 style="font-size:1rem">${esc(title)}</h2></div>
+    <div class="table-wrap" style="margin-bottom:12px">
+      <table>
+        <thead><tr>
+          <th>พนักงาน</th><th>ประเภท</th><th class="num">${parttime ? 'ได้ทั้งงวด' : 'ฐานเงิน'}</th>
+          ${parttime ? '<th class="num">จ่ายสดรายวันแล้ว</th>' : ''}
+          <th class="num">เบิกล่วงหน้า</th><th class="num">หักอื่นๆ</th><th class="num">สุทธิ</th><th>สถานะ</th><th>จัดการ</th>
+        </tr></thead>
+        <tbody>
+          ${rows.length ? rows.map((r) => rowHtmlWithDetail(r, cols)).join('') : `<tr><td colspan="${cols}">${esc(emptyText)}</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 // ใช้ครั้งเดียวตอนย้ายมาใช้งวดครึ่งเดือน กรณีหนี้เบิกล่วงหน้าที่ระบบยังนับค้างอยู่
@@ -176,12 +242,12 @@ async function clearAllOutstanding() {
   showToast(`ล้างยอดเบิกค้างให้ ${toClear.length} คนแล้ว`);
 }
 
-function rowHtmlWithDetail(row) {
+function rowHtmlWithDetail(row, cols) {
   const expanded = row.emp.id === expandedEmployeeId;
-  return rowHtml(row, expanded) + (expanded ? detailRowHtml(row) : '');
+  return rowHtml(row, expanded) + (expanded ? detailRowHtml(row, cols) : '');
 }
 
-function rowHtml({ emp, parttime, therapist, base, rawCommission, guaranteeTopUp, balanceBefore, override, advance, balanceAfter, otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid }, expanded) {
+function rowHtml({ emp, parttime, therapist, base, rawCommission, guaranteeTopUp, cashPaid, balanceBefore, override, advance, balanceAfter, otherDeductionDefault, otherDeductionOverride, otherDeduction, net, paid }, expanded) {
   const roleLabel = parttime
     ? '<span class="pill warn">พาร์ทไทม์</span>'
     : therapist
@@ -191,9 +257,7 @@ function rowHtml({ emp, parttime, therapist, base, rawCommission, guaranteeTopUp
   // <td> a flex row, so multiple top-level nodes (text + several .cell-sub
   // divs) would get spread apart by justify-content instead of stacking
   // as one continuous block of text.
-  const baseLabel = parttime
-    ? `<div>${THB(0)} <span class="cell-sub">(จ่ายค่าคอมเป็นเงินสดรายวันแล้ว)</span></div>`
-    : therapist
+  const baseLabel = therapist
     ? `<div>${THB(base)}${guaranteeTopUp > 0 ? `<div class="cell-sub">ค่าคอมจริง ${THB(rawCommission)} + ประกัน ${THB(guaranteeTopUp)}</div>` : ''}</div>`
     : `<div>${THB(base)} <span class="cell-sub">(เงินเดือนตายตัว)</span></div>`;
 
@@ -217,7 +281,8 @@ function rowHtml({ emp, parttime, therapist, base, rawCommission, guaranteeTopUp
     <tr>
       <td data-label="พนักงาน" data-toggle-detail="${emp.id}" class="clickable">${expanded ? '▾' : '▸'} ${esc(emp.name)}</td>
       <td data-label="ประเภท">${roleLabel}</td>
-      <td class="num" data-label="ฐานเงิน">${baseLabel}</td>
+      <td class="num" data-label="${parttime ? 'ได้ทั้งงวด' : 'ฐานเงิน'}">${baseLabel}</td>
+      ${parttime ? `<td class="num" data-label="จ่ายสดรายวันแล้ว">${cashPaid > 0 ? `<div style="color:var(--good)">-${THB(cashPaid)}</div>` : '-'}</td>` : ''}
       <td class="num" data-label="เบิกล่วงหน้า">${advanceCell}</td>
       <td class="num" data-label="หักอื่นๆ">${otherDeduction > 0 ? `
         <div>
@@ -243,15 +308,33 @@ function advancePillHtml(a, deductedAmount) {
   return `<span class="pill ${pillClass}">${fmtDate(a.date)} · ${THB(amount)}${a.reason ? ' · ' + esc(a.reason) : ''} · ${deducted}</span>`;
 }
 
-function detailRowHtml({ emp, parttime, therapist }) {
+function dailyPayControlHtml(emp, date, guaranteed, periodPaid) {
+  const rec = parttimeDailyPayFor(emp.id, date);
+  if (rec) {
+    const amt = Number(rec.amount) || 0;
+    const diff = guaranteed - amt;
+    return `
+      <span class="pill good">จ่ายสดแล้ว ${THB(amt)}</span>
+      ${diff !== 0 ? `<span class="pill warn">${diff > 0 ? `ค้างเพิ่ม ${THB(diff)} รวมสิ้นงวด` : `จ่ายเกิน ${THB(-diff)} หักสิ้นงวด`}</span>` : ''}
+      ${periodPaid ? '' : `<button class="btn small ghost" data-day-pay="${emp.id}" data-date="${date}">ยกเลิก</button>`}
+    `;
+  }
+  return `
+    <span class="pill neutral">สะสมจ่ายสิ้นงวด</span>
+    ${periodPaid ? '' : `<button class="btn small" data-day-pay="${emp.id}" data-date="${date}" data-amount="${guaranteed}">จ่ายสดวันนี้แล้ว</button>`}
+  `;
+}
+
+function detailRowHtml({ emp, parttime, therapist, paid }, cols = 8) {
   let body;
-  if (parttime) {
-    body = `<p class="cell-sub">พาร์ทไทม์ได้ค่าคอมเป็นเงินสดรายวันแล้ว ไม่ได้จ่ายผ่านงวดนี้ — ที่โผล่ในรายการนี้คือยอดเบิกล่วงหน้าที่ยังค้างอยู่เท่านั้น</p>`;
-  } else if (therapist) {
+  if (therapist) {
     const days = dailyBreakdownForEmployeeInHalfMonth(emp.id, currentPeriod);
     const periodSessions = sessionsForHalfMonth(currentPeriod).filter((s) => s.employeeId === emp.id);
 
-    body = days.length ? days.map((d) => {
+    const intro = parttime
+      ? `<p class="cell-sub" style="margin-bottom:10px">พาร์ทไทม์: วันไหนจ่ายเงินสดตอนเลิกงานไปแล้วให้กด "จ่ายสดวันนี้แล้ว" — วันที่ไม่ได้กดจะสะสมไปจ่ายรวมตอนสิ้นงวดนี้</p>`
+      : '';
+    body = intro + (days.length ? days.map((d) => {
       const daySessions = periodSessions.filter((s) => s.date === d.date);
       const minWage = minDailyWage();
       const guaranteed = !d.hasIssue && d.commission < minWage ? minWage : d.commission;
@@ -265,12 +348,30 @@ function detailRowHtml({ emp, parttime, therapist }) {
             <b style="font-size:.85rem">${fmtDate(d.date)}</b>
             <span class="cell-sub">ค่าคอม ${THB(d.commission)} ${topUp > 0 ? `→ ${THB(guaranteed)}` : ''} ${flagPill}</span>
           </div>
+          ${parttime ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">${dailyPayControlHtml(emp, d.date, guaranteed, paid)}</div>` : ''}
           <div style="display:flex;flex-wrap:wrap;gap:6px">
             ${daySessions.map((s) => `<span class="pill neutral">${esc(s.serviceName)} (${s.duration} น.) · ${THB(s.commission)}</span>`).join('')}
           </div>
         </div>
       `;
-    }).join('') : `<p class="cell-sub">ยังไม่มีการนวดในงวดนี้</p>`;
+    }).join('') : `<p class="cell-sub">ยังไม่มีการนวดในงวดนี้</p>`);
+
+    // เงินสดที่จ่ายไปแล้วแต่วันนั้นไม่มีรายการนวดเหลืออยู่ (เช่นลบรายการนวดทีหลัง) ยังถูกหักจากงวดนี้
+    // อยู่ เพราะเป็นเงินที่ออกจากร้านไปจริง — โชว์ไว้ให้เห็นว่ามาจากไหน จะได้ไม่งงว่ายอดหักมาจากอะไร
+    if (parttime) {
+      const dayDates = new Set(days.map((d) => d.date));
+      const orphans = parttimeDailyPaysForEmployeeInHalfMonth(emp.id, currentPeriod).filter((p) => !dayDates.has(p.date));
+      if (orphans.length) {
+        body += `
+          <div style="margin-top:8px">
+            <b style="font-size:.85rem">จ่ายสดไปแล้วแต่ไม่มีรายการนวดวันนั้น</b>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center">
+              ${orphans.map((p) => `<span class="pill warn">${fmtDate(p.date)} · ${THB(Number(p.amount) || 0)}</span>${paid ? '' : `<button class="btn small ghost" data-day-pay="${emp.id}" data-date="${p.date}">ยกเลิก</button>`}`).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }
   } else {
     body = `<p class="cell-sub">เงินเดือนตายตัว ไม่ผูกกับการนวด</p>`;
   }
@@ -298,7 +399,7 @@ function detailRowHtml({ emp, parttime, therapist }) {
 
   return `
     <tr>
-      <td colspan="8" style="background:var(--surface-2);padding:16px 18px">
+      <td colspan="${cols}" style="background:var(--surface-2);padding:16px 18px">
         <div class="drop-anim">
           ${body}
           ${advancesHtml}
@@ -311,13 +412,15 @@ function detailRowHtml({ emp, parttime, therapist }) {
 
 function openPayModal(row) {
   deductingRow = row;
-  const { emp, base, balanceBefore, advance, otherDeduction } = row;
+  const { emp, base, cashPaid, parttime, balanceBefore, advance, otherDeduction } = row;
   const approvedAdvances = advancesForEmployee(emp.id).filter((a) => a.status === 'approved');
   const deductedAmounts = advanceDeductedAmounts(emp.id);
   const periodDeductions = deductionsForEmployeeInHalfMonth(emp.id, currentPeriod);
 
   document.getElementById('deductModalTitle').textContent = `จ่ายเงินเดือน: ${emp.name}`;
   document.getElementById('deduct_earned').textContent = THB(base);
+  document.getElementById('deduct_cashpaid_card').style.display = parttime ? '' : 'none';
+  document.getElementById('deduct_cashpaid').textContent = THB(cashPaid || 0);
   document.getElementById('deduct_owed').textContent = THB(balanceBefore);
   document.getElementById('deduct_history').innerHTML = approvedAdvances.length
     ? approvedAdvances.map((a) => advancePillHtml(a, deductedAmounts.get(a.id) || 0)).join('')
@@ -337,7 +440,7 @@ function updatePayModalNet() {
   if (!deductingRow) return;
   const advanceAmt = Number(document.getElementById('deduct_amount').value) || 0;
   const otherAmt = Number(document.getElementById('deduct_other_amount').value) || 0;
-  const net = deductingRow.base - advanceAmt - otherAmt;
+  const net = deductingRow.base - (deductingRow.cashPaid || 0) - advanceAmt - otherAmt;
   const netEl = document.getElementById('deduct_net');
   netEl.textContent = THB(net);
   netEl.style.color = net < 0 ? 'var(--bad)' : '';
@@ -358,13 +461,14 @@ export function initDeductModal() {
 
   guardClick(document.getElementById('deduct_save'), async () => {
     if (!deductingRow) return;
-    const { emp, balanceBefore, base } = deductingRow;
+    const { emp, base, parttime } = deductingRow;
+    const cashPaid = deductingRow.cashPaid || 0;
     // ไม่ล็อกเพดานไว้ที่ยอดเบิกค้าง (balanceBefore) อีกต่อไป เพราะถ้าตัวเลขนั้นคลาดเคลื่อน
     // (เช่น มีรายการ "เคลียร์ยอด" เก่าตกค้างอยู่) ผู้ใช้จะพิมพ์แก้เองไม่ได้เลยเพราะถูกบังคับ
     // ปัดกลับเป็นค่าเดิมทุกครั้งที่กดยืนยัน — ให้ผู้ใช้ตัดสินใจเองแทนที่จะเชื่อเลขนี้เป๊ะๆ
     const advanceAmount = Math.max(0, Number(document.getElementById('deduct_amount').value) || 0);
     const otherAmount = Math.max(0, Number(document.getElementById('deduct_other_amount').value) || 0);
-    const net = base - advanceAmount - otherAmount;
+    const net = base - cashPaid - advanceAmount - otherAmount;
 
     if (net < 0) {
       const ok = await showConfirm(`สุทธิที่จะจ่ายติดลบ (${THB(net)}) ยืนยันว่าจะหักเท่านี้จริงหรือไม่?`, true);
@@ -380,7 +484,10 @@ export function initDeductModal() {
       period: currentPeriod, month: currentPeriod.slice(0, 7),
       // grossCost = เงินสดจริงที่ร้านจ่ายออกทั้งงวด (netPay ที่จ่ายตอนนี้ + เบิกล่วงหน้าที่จ่ายไปก่อน
       // หน้าแล้วมาหักคืนตรงนี้) ใช้คำนวณต้นทุนแรงงานในใบสรุปรายได้ ไม่ให้ยอดเบิกหายไปจากบัญชี
+      // พาร์ทไทม์: grossCost รวมเงินสดรายวันที่จ่ายไปแล้วด้วย (ต้นทุนจริงทั้งงวด) ส่วน cashPaidDaily เก็บ
+      // snapshot ไว้ให้งวดที่ปิดแล้วแสดงยอดเดิมได้แม้มีคนไปแก้รายการรายวันทีหลัง
       netPay: net, grossCost: base - otherAmount, paidAt: new Date().toISOString(),
+      ...(parttime ? { cashPaidDaily: cashPaid, role: 'parttime' } : {}),
     });
     closeDeductModal();
     renderPayroll();

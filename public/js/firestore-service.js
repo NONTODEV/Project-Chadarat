@@ -16,9 +16,10 @@ const COLLECTIONS = {
   packages: { stateKey: 'packages', order: 'purchaseDate' },
   packageTemplates: { stateKey: 'packageTemplates', order: 'name' },
   deductions: { stateKey: 'deductions', order: 'date' },
+  parttimeDailyPays: { stateKey: 'parttimeDailyPays', order: 'date' },
 };
 
-const loaded = { services: false, employees: false, sessions: false, advances: false, payroll: false, payrollDeductions: false, leaves: false, expenses: false, packages: false, packageTemplates: false, deductions: false, settings: false };
+const loaded = { services: false, employees: false, sessions: false, advances: false, payroll: false, payrollDeductions: false, leaves: false, expenses: false, packages: false, packageTemplates: false, deductions: false, parttimeDailyPays: false, settings: false };
 let onReadyCb = null;
 
 export function initCloudSync(onReady) {
@@ -57,6 +58,7 @@ export const expensesCrud = makeCrud('expenses');
 export const packagesCrud = makeCrud('packages');
 export const packageTemplatesCrud = makeCrud('packageTemplates');
 export const deductionsCrud = makeCrud('deductions');
+export const parttimeDailyPaysCrud = makeCrud('parttimeDailyPays');
 
 export const settingsCrud = {
   save: async (data) => setDoc(doc(db, 'settings', 'general'), data, { merge: true }),

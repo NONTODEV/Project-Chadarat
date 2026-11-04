@@ -4,6 +4,7 @@ import {
   packagesForDay, packagesForMonth, packagesForYear, packagesForHalfMonth,
   availableMonths, availableYears, availableHalfMonths,
   outstandingBalanceBeforeMonth, minDailyWage, leavesOnDate,
+  isParttime, parttimeDailyPaidTotalWhere,
 } from '../store.js';
 import { THB, esc, fmtDate, todayISO, halfMonthLabel } from '../utils.js';
 
@@ -38,8 +39,9 @@ function dailyEmployeeBreakdown(sessions) {
   const map = new Map();
   for (const s of sessions) {
     const key = `${s.date}|${s.employeeId}`;
-    if (!map.has(key)) map.set(key, { date: s.date, employeeId: s.employeeId, employeeName: s.employeeName, revenue: 0, commission: 0, hasIssue: false });
+    if (!map.has(key)) map.set(key, { date: s.date, employeeId: s.employeeId, employeeName: s.employeeName, revenue: 0, commission: 0, sessions: 0, hasIssue: false });
     const row = map.get(key);
+    if (!s.attendanceOnly) row.sessions += 1;
     row.revenue += (Number(s.customerPrice) || 0) - (Number(s.discount) || 0);
     row.commission += Number(s.commission) || 0;
     if (s.late || s.leftEarly) row.hasIssue = true;
@@ -82,6 +84,98 @@ function groupByDay(rows) {
   return Array.from(map.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
+const parttimePill = ' <span class="pill warn">พาร์ทไทม์</span>';
+function nameCellHtml(row) {
+  const emp = state.employees.find((e) => e.id === row.employeeId);
+  return `${esc(row.employeeName)}${isParttime(emp) ? parttimePill : ''}`;
+}
+
+// สรุปรายได้/ค่าแรงแยก "พนักงานประจำ" กับ "พาร์ทไทม์" ทีละคน — รายได้ = ยอดที่ลูกค้าจ่ายจาก
+// การนวดของคนนั้น (หักส่วนลดแล้ว ไม่รวมแพ็กเกจ เพราะแพ็กเกจขายเป็นของร้าน ไม่ผูกกับคนนวด),
+// ค่าแรง = ค่าคอม + ประกันขั้นต่ำรายวัน (สูตรเดียวกับหน้าเงินเดือน), กำไรหลังค่าแรง = รายได้ - ค่าแรง
+function buildStaffBreakdown(employeeDayRows, inPeriod, housekeeperCost) {
+  const byEmp = new Map();
+  for (const r of employeeDayRows) {
+    if (!byEmp.has(r.employeeId)) {
+      const emp = state.employees.find((e) => e.id === r.employeeId);
+      byEmp.set(r.employeeId, {
+        employeeId: r.employeeId, employeeName: r.employeeName, parttime: isParttime(emp),
+        days: 0, sessions: 0, revenue: 0, labor: 0, cashPaid: 0,
+      });
+    }
+    const x = byEmp.get(r.employeeId);
+    x.days += 1;
+    x.sessions += r.sessions;
+    x.revenue += r.revenue;
+    x.labor += guaranteedAmount(r);
+  }
+  const list = Array.from(byEmp.values()).sort((a, b) => b.revenue - a.revenue);
+  for (const x of list) {
+    if (x.parttime) x.cashPaid = parttimeDailyPaidTotalWhere(x.employeeId, inPeriod);
+  }
+  const sum = (arr) => arr.reduce((t, x) => ({
+    count: t.count + 1, sessions: t.sessions + x.sessions, revenue: t.revenue + x.revenue,
+    labor: t.labor + x.labor, cashPaid: t.cashPaid + x.cashPaid,
+  }), { count: 0, sessions: 0, revenue: 0, labor: 0, cashPaid: 0 });
+  const regular = list.filter((x) => !x.parttime);
+  const parttime = list.filter((x) => x.parttime);
+  const regularTotal = sum(regular);
+  regularTotal.labor += housekeeperCost; // แม่บ้านนับเป็นค่าแรงพนักงานประจำ (ไม่มีรายได้จากการนวด)
+  const parttimeTotal = sum(parttime);
+  return { regular, parttime, regularTotal, parttimeTotal };
+}
+
+function staffBreakdownHtml({ regular, parttime, regularTotal, parttimeTotal }, housekeeperCost, periodLabel) {
+  const profitCell = (v) => `<b style="color:${v < 0 ? 'var(--bad)' : 'var(--good)'}">${THB(v)}</b>`;
+  const share = (v, total) => (total > 0 ? `${Math.round((v / total) * 100)}%` : '-');
+  const grandRevenue = regularTotal.revenue + parttimeTotal.revenue;
+  const empRow = (x) => `
+    <tr>
+      <td data-label="พนักงาน">${esc(x.employeeName)}</td>
+      <td class="num" data-label="วัน/ครั้ง">${x.days} วัน · ${x.sessions} ครั้ง</td>
+      <td class="num" data-label="รายได้">${THB(x.revenue)}</td>
+      <td class="num" data-label="ค่าแรง"><div>${THB(x.labor)}${x.parttime ? `<div class="cell-sub">จ่ายสดแล้ว ${THB(x.cashPaid)} · ค้างจ่ายรวมงวด ${THB(Math.max(0, x.labor - x.cashPaid))}</div>` : ''}</div></td>
+      <td class="num" data-label="กำไรหลังค่าแรง">${profitCell(x.revenue - x.labor)}</td>
+    </tr>`;
+  const subtotalRow = (label, t) => `
+    <tr style="font-weight:700;background:var(--surface-2)">
+      <td data-label="รวม">${label} (${t.count} คน)</td>
+      <td class="num" data-label="วัน/ครั้ง">${t.sessions} ครั้ง</td>
+      <td class="num" data-label="รายได้"><div>${THB(t.revenue)}<div class="cell-sub">${share(t.revenue, grandRevenue)} ของรายได้นวด</div></div></td>
+      <td class="num" data-label="ค่าแรง">${THB(t.labor)}</td>
+      <td class="num" data-label="กำไรหลังค่าแรง">${profitCell(t.revenue - t.labor)}</td>
+    </tr>`;
+  const groupHead = (label) => `<tr><td colspan="5" style="padding-top:14px"><b>${label}</b></td></tr>`;
+  return `
+    <div class="widget">
+      <div class="widget-head"><h2>รายได้แยก พนักงานประจำ / พาร์ทไทม์ (${esc(periodLabel)})</h2></div>
+      <div class="table-wrap flat">
+        <table>
+          <thead><tr><th>พนักงาน</th><th class="num">วัน/ครั้ง</th><th class="num">รายได้</th><th class="num">ค่าแรง</th><th class="num">กำไรหลังค่าแรง</th></tr></thead>
+          <tbody>
+            ${groupHead('พนักงานประจำ')}
+            ${regular.map(empRow).join('')}
+            ${housekeeperCost > 0 ? `
+              <tr>
+                <td data-label="พนักงาน">แม่บ้าน (เงินเดือนตายตัว)</td>
+                <td class="num" data-label="วัน/ครั้ง">-</td>
+                <td class="num" data-label="รายได้">-</td>
+                <td class="num" data-label="ค่าแรง">${THB(housekeeperCost)}</td>
+                <td class="num" data-label="กำไรหลังค่าแรง">${profitCell(-housekeeperCost)}</td>
+              </tr>` : ''}
+            ${!regular.length && !housekeeperCost ? '<tr><td colspan="5" class="cell-sub">ไม่มีข้อมูลในช่วงนี้</td></tr>' : ''}
+            ${subtotalRow('รวมพนักงานประจำ', regularTotal)}
+            ${groupHead('พาร์ทไทม์')}
+            ${parttime.length ? parttime.map(empRow).join('') : '<tr><td colspan="5" class="cell-sub">ไม่มีพาร์ทไทม์ทำงานในช่วงนี้</td></tr>'}
+            ${subtotalRow('รวมพาร์ทไทม์', parttimeTotal)}
+          </tbody>
+        </table>
+      </div>
+      ${housekeeperCost > 0 ? '<p class="cell-sub" style="margin-top:8px">ค่าแรงพนักงานประจำรวมเงินเดือนแม่บ้านแล้ว · รายได้ไม่รวมยอดขายแพ็กเกจ</p>' : '<p class="cell-sub" style="margin-top:8px">รายได้ไม่รวมยอดขายแพ็กเกจ</p>'}
+    </div>
+  `;
+}
+
 function dayGroupHtml(day) {
   const open = expandedDays.has(day.date);
   const dayTotal = day.rows.reduce((sum, r) => sum + guaranteedAmount(r), 0);
@@ -98,7 +192,7 @@ function dayGroupHtml(day) {
             <tbody>
               ${day.rows.map((r) => `
                 <tr>
-                  <td data-label="พนักงาน">${esc(r.employeeName)}</td>
+                  <td data-label="พนักงาน">${nameCellHtml(r)}</td>
                   <td class="num" data-label="ค่าคอม">${commissionCellHtml(r)}</td>
                   <td class="num" data-label="ต้องจ่าย"><b>${THB(guaranteedAmount(r))}</b></td>
                   <td class="num" data-label="เบิกล่วงหน้า">${r.owed > 0 ? THB(r.owed) : '-'}</td>
@@ -129,27 +223,32 @@ export function renderDashboard() {
   if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0];
   if (!selectedHalfMonth || !halfMonths.includes(selectedHalfMonth)) selectedHalfMonth = halfMonths[0];
 
-  let periodSessions, periodExpenses, periodPackages, periodLabel;
+  let periodSessions, periodExpenses, periodPackages, periodLabel, inPeriod;
   if (periodType === 'daily') {
     periodSessions = sessionsForDay(selectedDay);
     periodExpenses = expensesForDay(selectedDay);
     periodPackages = packagesForDay(selectedDay);
     periodLabel = fmtDate(selectedDay);
+    inPeriod = (d) => d === selectedDay;
   } else if (periodType === 'half-month') {
     periodSessions = sessionsForHalfMonth(selectedHalfMonth);
     periodExpenses = expensesForHalfMonth(selectedHalfMonth);
     periodPackages = packagesForHalfMonth(selectedHalfMonth);
     periodLabel = halfMonthPeriodLabel(selectedHalfMonth);
+    const h1 = selectedHalfMonth.endsWith('H1');
+    inPeriod = (d) => d.slice(0, 7) === selectedHalfMonth.slice(0, 7) && (h1 ? Number(d.slice(8, 10)) <= 15 : Number(d.slice(8, 10)) > 15);
   } else if (periodType === 'yearly') {
     periodSessions = sessionsForYear(selectedYear);
     periodExpenses = expensesForYear(selectedYear);
     periodPackages = packagesForYear(selectedYear);
     periodLabel = `ปี ${selectedYear}`;
+    inPeriod = (d) => d.slice(0, 4) === selectedYear;
   } else {
     periodSessions = sessionsForMonth(selectedMonth);
     periodExpenses = expensesForMonth(selectedMonth);
     periodPackages = packagesForMonth(selectedMonth);
     periodLabel = selectedMonth;
+    inPeriod = (d) => d.slice(0, 7) === selectedMonth;
   }
 
   const activeEmployees = state.employees.filter((e) => e.active !== false).length;
@@ -176,13 +275,10 @@ export function renderDashboard() {
   // แพ็กเกจเข้ามาด้วย ไม่งั้นเดือนที่มีขายแพ็กเกจ ตัวเลขนี้จะไม่ตรงกับใบสรุปรายได้ซึ่งรวมไว้แล้ว
   const netRevenue = revenue + packageRevenue - commission - expenseTotal - housekeeperCost;
 
-  // ค่าคอมของพาร์ทไทม์นับรวมอยู่ใน "commission" (เลยไม่ต้องหักซ้ำใน netRevenue) แต่พาร์ทไทม์
-  // จ่ายเงินสดให้ทุกวันตอนเลิกงานแล้ว (ไม่รอจ่ายงวดแบบพนักงานประจำ) เลยแยกโชว์เป็นยอดของตัวเอง
-  // ไว้ดูว่าจ่ายเงินสดออกไปให้พาร์ทไทม์วันนี้/ช่วงนี้เท่าไรแล้ว
-  const parttimeIds = new Set(state.employees.filter((e) => e.role === 'parttime').map((e) => e.id));
-  const parttimeCommission = employeeDayRows
-    .filter((r) => parttimeIds.has(r.employeeId))
-    .reduce((sum, r) => sum + guaranteedAmount(r), 0);
+  // แยกรายได้/ค่าแรงเป็น พนักงานประจำ vs พาร์ทไทม์ — ค่าแรงของทั้งสองกลุ่มรวมกันเท่ากับ
+  // commission + housekeeperCost เดิมพอดี (netRevenue ไม่เปลี่ยน แค่แยกให้เห็นว่ามาจากไหน)
+  const staff = buildStaffBreakdown(employeeDayRows, inPeriod, housekeeperCost);
+  const { regularTotal, parttimeTotal } = staff;
 
   // มานวดครั้งเดียวแต่ทำหลายบริการ จะถูกบันทึกเป็นหลาย session แยกกันแต่แชร์ visitId เดียวกัน
   // (ของเก่าที่ไม่มี visitId ใช้ id ตัวเองแทน = กลุ่มละ 1 รายการ) — กลุ่มรวมกันก่อนตัด 10 รายการ
@@ -258,13 +354,18 @@ export function renderDashboard() {
       <div class="summary-card"><span>ยอดนวด (${esc(periodLabel)})</span><b>${periodSessions.length} ครั้ง</b></div>
       <div class="summary-card"><span>รายได้ร้าน (${esc(periodLabel)})</span><b>${THB(revenue)}</b></div>
       ${discountTotal > 0 ? `<div class="summary-card"><span>ส่วนลดที่ให้ไป (${esc(periodLabel)})</span><b style="color:var(--warn)">${THB(discountTotal)}</b></div>` : ''}
-      <div class="summary-card"><span>ค่าคอม (${esc(periodLabel)})</span><b>${THB(commission)}</b></div>
+      <div class="summary-card"><span>รายได้จากพนักงานประจำ (${esc(periodLabel)})</span><b>${THB(regularTotal.revenue)}</b></div>
+      <div class="summary-card"><span>รายได้จากพาร์ทไทม์ (${esc(periodLabel)})</span><b>${THB(parttimeTotal.revenue)}</b></div>
+      <div class="summary-card"><span>ค่าคอม+ประกัน รวม (${esc(periodLabel)})</span><b>${THB(commission)}</b></div>
+      <div class="summary-card"><span>ค่าแรงพนักงานประจำ${housekeeperCost > 0 ? ' (รวมแม่บ้าน)' : ''} (${esc(periodLabel)})</span><b>${THB(regularTotal.labor)}</b></div>
+      <div class="summary-card"><span>ค่าแรงพาร์ทไทม์ (${esc(periodLabel)})</span><b>${THB(parttimeTotal.labor)}</b>${parttimeTotal.labor > 0 ? `<span>จ่ายสดแล้ว ${THB(parttimeTotal.cashPaid)} · ค้างรวมงวด ${THB(Math.max(0, parttimeTotal.labor - parttimeTotal.cashPaid))}</span>` : ''}</div>
       <div class="summary-card"><span>รายจ่ายจิปาถะ (${esc(periodLabel)})</span><b>${THB(expenseTotal)}</b></div>
       ${housekeeperCost > 0 ? `<div class="summary-card"><span>เงินเดือนแม่บ้าน (${esc(periodLabel)})</span><b>${THB(housekeeperCost)}</b></div>` : ''}
-      ${parttimeCommission > 0 ? `<div class="summary-card"><span>ค่าแรงพาร์ทไทม์ จ่ายรายวัน (${esc(periodLabel)})</span><b>${THB(parttimeCommission)}</b></div>` : ''}
       <div class="summary-card"><span>รายได้สุทธิ (${esc(periodLabel)})</span><b style="color:${netRevenue < 0 ? 'var(--bad)' : 'var(--good)'}">${THB(netRevenue)}</b></div>
       <div class="summary-card"><span>ยอดขายแพ็กเกจ (${esc(periodLabel)})</span><b>${THB(packageRevenue)}</b></div>
     </div>
+
+    ${staffBreakdownHtml(staff, housekeeperCost, periodLabel)}
 
     <div class="widget-head" style="margin-bottom:10px">
       <h2 style="font-size:1rem">ค่าคอมแยกตามพนักงาน (${esc(periodLabel)})</h2>
@@ -276,7 +377,7 @@ export function renderDashboard() {
           <tbody>
             ${dailyRowsWithZero.length ? dailyRowsWithZero.map((row) => `
               <tr>
-                <td data-label="พนักงาน">${esc(row.employeeName)}${row.onLeave ? ' <span class="pill warn">ลา</span>' : ''}</td>
+                <td data-label="พนักงาน">${nameCellHtml(row)}${row.onLeave ? ' <span class="pill warn">ลา</span>' : ''}</td>
                 <td class="num" data-label="ค่าคอม">${commissionCellHtml(row, row.hasRecord)}</td>
                 <td class="num" data-label="ต้องจ่าย"><b>${THB(guaranteedAmount(row, row.hasRecord))}</b></td>
                 <td class="num" data-label="เบิกล่วงหน้า">${row.owed > 0 ? THB(row.owed) : '-'}</td>

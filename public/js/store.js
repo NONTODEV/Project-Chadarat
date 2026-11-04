@@ -12,6 +12,7 @@ export const state = {
   packages: [],
   packageTemplates: [],
   deductions: [],
+  parttimeDailyPays: [],
   settings: { minDailyWage: MIN_DAILY_WAGE, durations: DURATIONS },
 };
 
@@ -30,6 +31,10 @@ export const authState = { email: null };
 
 export function employeeById(id) {
   return state.employees.find((e) => e.id === id);
+}
+
+export function isParttime(emp) {
+  return emp?.role === 'parttime';
 }
 
 export function isTherapist(emp) {
@@ -198,6 +203,31 @@ export function dailyBreakdownForEmployeeInHalfMonth(employeeId, period) {
 
 export function guaranteedEarningsForEmployeeInHalfMonth(employeeId, period) {
   return guaranteedEarningsForSessions(sessionsForHalfMonth(period).filter((s) => s.employeeId === employeeId));
+}
+
+// ---- พาร์ทไทม์: จ่ายสดรายวัน "บางวัน" ได้ ที่เหลือสะสมไปจ่ายรวมในงวดครึ่งเดือนเหมือนพนักงานประจำ ----
+// เก็บใน collection parttimeDailyPays (doc id = "YYYY-MM-DD_<employeeId>") ยอด amount คือเงินสดที่
+// จ่ายไปจริงวันนั้น (snapshot ตอนกด ไม่คำนวณใหม่) งวดครึ่งเดือนจะหักยอดพวกนี้ออกจากยอดที่ได้ทั้งงวด
+// เหลือเท่าไรค่อยจ่ายตอนสิ้นงวด — คนที่รับรายวันครบทุกวันจะเหลือ 0 ตอนสิ้นงวด คนที่ไม่รับเลยได้เต็มก้อน
+export function parttimeDailyPayFor(employeeId, date) {
+  return state.parttimeDailyPays.find((p) => p.employeeId === employeeId && p.date === date) || null;
+}
+
+export function parttimeDailyPaysForEmployeeInHalfMonth(employeeId, period) {
+  return state.parttimeDailyPays.filter((p) => p.employeeId === employeeId && isDateInHalfMonthPeriod(p.date, period));
+}
+
+export function parttimeDailyPaidTotalInHalfMonth(employeeId, period) {
+  return parttimeDailyPaysForEmployeeInHalfMonth(employeeId, period)
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+}
+
+// รับช่วงวันที่ใดก็ได้ (ใช้ในหน้าภาพรวม) — employeeId = null คือทุกคน, inPeriod รับ "YYYY-MM-DD"
+// คืน true ถ้าอยู่ในช่วงที่ต้องการ
+export function parttimeDailyPaidTotalWhere(employeeId, inPeriod) {
+  return state.parttimeDailyPays
+    .filter((p) => (employeeId == null || p.employeeId === employeeId) && inPeriod(p.date || ''))
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 }
 
 export function availableHalfMonths() {

@@ -49,6 +49,9 @@ service cloud.firestore {
     match /deductions/{deductionId} {
       allow read, write: if isStaff();
     }
+    match /parttimeDailyPays/{payId} {
+      allow read, write: if isStaff();
+    }
     match /{document=**} {
       allow read, write: if false;
     }
