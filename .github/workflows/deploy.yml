@@ -34,4 +34,4 @@ jobs:
           create_credentials_file: true
 
       - name: Deploy hosting + firestore rules
-        run: npx --yes firebase-tools@latest deploy --only hosting,firestore:rules --project project-chadarat --non-interactive --debug
+        run: npx --yes firebase-tools@latest deploy --only hosting,firestore:rules --project project-chadarat --non-interactive
