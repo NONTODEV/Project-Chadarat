@@ -121,15 +121,14 @@ firebase deploy --only hosting
 ### Deploy อัตโนมัติด้วย GitHub Actions
 
 `.github/workflows/deploy.yml` deploy ทั้ง hosting และ Firestore rules ให้เองทุกครั้งที่ push เข้า `main`
-(หรือกดรันเองจากแท็บ Actions) ต้องตั้งค่าครั้งเดียว:
+(หรือกดรันเองจากแท็บ Actions) ยืนยันตัวกับ Google ผ่าน Workload Identity Federation จึงไม่มีไฟล์กุญแจ
+หรือ secret เก็บไว้ที่ไหนเลย ตั้งค่าฝั่ง Google Cloud ครั้งเดียว:
 
-1. Google Cloud Console → IAM & Admin → Service Accounts (โปรเจกต์ `project-chadarat`) → สร้าง service account ใหม่
-   เช่น `github-deploy` แล้วให้ role: **Firebase Hosting Admin**, **Firebase Rules Admin**, **Service Usage Consumer**
-2. เข้าไปที่ service account นั้น → แท็บ Keys → Add key → JSON → ได้ไฟล์ `.json` มา
-3. GitHub repo → Settings → Secrets and variables → Actions → New repository secret
-   ชื่อ `FIREBASE_SERVICE_ACCOUNT` วางเนื้อหาไฟล์ JSON ทั้งไฟล์ แล้วลบไฟล์ในเครื่องทิ้ง
+1. เปิด https://console.cloud.google.com ด้วยบัญชีเจ้าของโปรเจกต์ `project-chadarat` แล้วเปิด Cloud Shell (ไอคอน `>_` มุมขวาบน)
+2. วางเนื้อหา `scripts/setup-github-deploy.sh` ทั้งไฟล์ลงไปรัน (รันซ้ำได้ ไม่สร้างของซ้ำ)
 
-ถ้ายังไม่ได้ตั้ง secret workflow จะข้ามการ deploy (ขึ้นคำเตือน ไม่ล้ม)
+สคริปต์สร้าง service account `github-deploy` ที่มีสิทธิ์แค่ deploy hosting + rules และอนุญาตเฉพาะ
+workflow ของ repo `NONTODEV/Project-Chadarat` เท่านั้นให้ใช้สิทธิ์นั้นได้
 
 ## โครงสร้างข้อมูลใน Firestore
 

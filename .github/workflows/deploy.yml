@@ -1,6 +1,6 @@
 # Deploy เว็บ (Firebase Hosting) + Firestore rules ขึ้น production อัตโนมัติทุกครั้งที่ push เข้า main
-# ต้องมี secret ชื่อ FIREBASE_SERVICE_ACCOUNT ใน repo (เนื้อหาไฟล์ JSON ของ service account ทั้งไฟล์)
-# ดูวิธีตั้งค่าใน README หัวข้อ "Deploy อัตโนมัติด้วย GitHub Actions"
+# ยืนยันตัวกับ Google ผ่าน Workload Identity Federation (ไม่มีไฟล์กุญแจ/secret เก็บใน repo)
+# ตั้งค่าฝั่ง Google Cloud ครั้งเดียวด้วย scripts/setup-github-deploy.sh (ดู README)
 name: Deploy to Firebase
 
 on:
@@ -13,6 +13,10 @@ concurrency:
   group: firebase-deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  id-token: write # ให้ GitHub ออก OIDC token ไปแลกสิทธิ์กับ Google
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -23,25 +27,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Prepare service account
-        id: creds
-        env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          if [ -z "$SA" ]; then
-            echo "::warning::ยังไม่ได้ตั้ง secret FIREBASE_SERVICE_ACCOUNT — ข้ามการ deploy"
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/144996454439/locations/global/workloadIdentityPools/github/providers/github-repo
+          service_account: github-deploy@project-chadarat.iam.gserviceaccount.com
+          create_credentials_file: true
 
       - name: Deploy hosting + firestore rules
-        if: steps.creds.outputs.ready == 'true'
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
         run: npx --yes firebase-tools@latest deploy --only hosting,firestore:rules --project project-chadarat --non-interactive
-
-      - name: Remove credentials
-        if: always()
-        run: rm -f "$RUNNER_TEMP/sa.json"
