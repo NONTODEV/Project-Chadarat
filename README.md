@@ -118,6 +118,19 @@ firebase deploy --only hosting
 คำสั่งนี้อัปโหลดทุกไฟล์ใน `public/` ขึ้น Firebase Hosting ทันที (ไม่มีขั้นตอน build คั่นกลาง)
 เว็บจะอัปเดตที่ **https://project-chadarat.web.app** ภายในไม่กี่วินาที
 
+### Deploy อัตโนมัติด้วย GitHub Actions
+
+`.github/workflows/deploy.yml` deploy ทั้ง hosting และ Firestore rules ให้เองทุกครั้งที่ push เข้า `main`
+(หรือกดรันเองจากแท็บ Actions) ต้องตั้งค่าครั้งเดียว:
+
+1. Google Cloud Console → IAM & Admin → Service Accounts (โปรเจกต์ `project-chadarat`) → สร้าง service account ใหม่
+   เช่น `github-deploy` แล้วให้ role: **Firebase Hosting Admin**, **Firebase Rules Admin**, **Service Usage Consumer**
+2. เข้าไปที่ service account นั้น → แท็บ Keys → Add key → JSON → ได้ไฟล์ `.json` มา
+3. GitHub repo → Settings → Secrets and variables → Actions → New repository secret
+   ชื่อ `FIREBASE_SERVICE_ACCOUNT` วางเนื้อหาไฟล์ JSON ทั้งไฟล์ แล้วลบไฟล์ในเครื่องทิ้ง
+
+ถ้ายังไม่ได้ตั้ง secret workflow จะข้ามการ deploy (ขึ้นคำเตือน ไม่ล้ม)
+
 ## โครงสร้างข้อมูลใน Firestore
 
 ทุก collection sync แบบเรียลไทม์เข้า `state` ฝั่ง client ผ่าน `firestore-service.js`:
